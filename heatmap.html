@@ -20,12 +20,9 @@
       padding: 8px 12px; background: #0f172a; color: #f1f5f9;
       border: 1px solid #38bdf8; border-radius: 8px; font-size: 0.9rem;
     }
-    .btn {
-      padding: 8px 16px; border: none; border-radius: 8px;
-      font-size: 0.85rem; font-weight: bold; cursor: pointer;
-    }
-    .btn-blue  { background: #0ea5e9; color: white; }
-    .btn-gray  { background: #334155; color: #f1f5f9; }
+    .btn { padding: 8px 16px; border: none; border-radius: 8px; font-size: 0.85rem; font-weight: bold; cursor: pointer; }
+    .btn-blue { background: #0ea5e9; color: white; }
+    .btn-gray { background: #334155; color: #f1f5f9; }
     #statsBar {
       padding: 8px 16px; background: #1e293b;
       border-bottom: 1px solid #334155;
@@ -33,32 +30,65 @@
     }
     #statsBar span { color: #f1f5f9; font-weight: bold; }
     #map { flex: 1; }
-    #modeBar {
-      display: flex; gap: 8px; align-items: center;
+
+    /* Timeline panel */
+    #timelinePanel {
+      display: none; position: fixed; right: 0; top: 0; bottom: 0;
+      width: 320px; background: #1e293b; border-left: 1px solid #334155;
+      z-index: 9999; flex-direction: column;
     }
-    .mode-btn {
-      padding: 6px 14px; border: 1px solid #334155; border-radius: 8px;
-      background: transparent; color: #94a3b8; cursor: pointer; font-size: 0.82rem;
+    #timelinePanel.open { display: flex; }
+    #tlHeader {
+      padding: 14px 16px; background: #0f172a;
+      border-bottom: 1px solid #334155;
+      display: flex; justify-content: space-between; align-items: center;
     }
-    .mode-btn.active { background: #0ea5e9; border-color: #0ea5e9; color: white; }
+    #tlHeader h2 { font-size: 0.95rem; }
+    #tlClose {
+      background: none; border: none; color: #94a3b8;
+      font-size: 1.2rem; cursor: pointer; padding: 4px 8px;
+    }
+    #tlClose:hover { color: #f1f5f9; }
+    #tlContent { flex: 1; overflow-y: auto; padding: 12px; }
+    .tl-item {
+      display: flex; gap: 12px; margin-bottom: 16px; position: relative;
+    }
+    .tl-item::before {
+      content: ''; position: absolute; left: 17px; top: 28px;
+      width: 2px; height: calc(100% + 4px); background: #334155;
+    }
+    .tl-item:last-child::before { display: none; }
+    .tl-dot {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: #0ea5e9; display: flex; align-items: center;
+      justify-content: center; font-size: 0.8rem; flex-shrink: 0;
+      border: 2px solid #38bdf8;
+    }
+    .tl-body { flex: 1; }
+    .tl-time { font-size: 0.8rem; color: #38bdf8; font-weight: bold; }
+    .tl-coord { font-size: 0.75rem; color: #64748b; margin-top: 2px; }
+    .tl-btn {
+      margin-top: 4px; padding: 4px 10px; background: #0f172a;
+      border: 1px solid #334155; border-radius: 6px;
+      color: #94a3b8; font-size: 0.75rem; cursor: pointer;
+    }
+    .tl-btn:hover { border-color: #38bdf8; color: #38bdf8; }
+    #tlEmpty { color: #64748b; text-align: center; padding: 40px 16px; font-size: 0.9rem; }
+    #tlUid { font-size: 0.7rem; color: #475569; padding: 0 16px 8px; word-break: break-all; }
   </style>
 </head>
 <body>
 
 <div id="topbar">
   <h1>🗺️ Heatmap</h1>
-
   <select id="parkSelect" onchange="loadData()">
     <option value="all">🌿 ทุกอุทยาน</option>
   </select>
-
   <select id="modeSelect" onchange="loadData()">
     <option value="daily">รายวัน</option>
     <option value="monthly">รายเดือน</option>
   </select>
-
   <input type="date" id="dateInput" onchange="loadData()">
-
   <button class="btn btn-blue" onclick="loadData()">🔄 โหลด</button>
   <button class="btn btn-gray" onclick="runSummary()">📊 สรุปวันนี้</button>
 </div>
@@ -71,6 +101,18 @@
 </div>
 
 <div id="map"></div>
+
+<!-- Timeline Panel -->
+<div id="timelinePanel">
+  <div id="tlHeader">
+    <h2>📍 เส้นทางนักท่องเที่ยว</h2>
+    <button id="tlClose" onclick="closeTimeline()">✕</button>
+  </div>
+  <div id="tlUid"></div>
+  <div id="tlContent">
+    <div id="tlEmpty">กด marker เพื่อดูเส้นทาง</div>
+  </div>
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
@@ -92,23 +134,21 @@
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
 
-  // set default date = today
   function todayStr() {
     return new Date(Date.now() + 7*3600000).toISOString().slice(0,10);
   }
-  function monthStr() {
-    return todayStr().slice(0,7);
-  }
+  function monthStr() { return todayStr().slice(0,7); }
+
   document.getElementById("dateInput").value = todayStr();
 
-  // Init map
   const map = L.map("map").setView([18.0, 100.5], 7);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "© OpenStreetMap"
   }).addTo(map);
 
   let clusterGroup = null;
-  let parksData = {};
+  let routeLayer   = null;
+  let parksData    = {};
 
   // โหลดรายการอุทยาน
   onValue(ref(db, "parks"), (snap) => {
@@ -120,15 +160,17 @@
     });
   });
 
-  // โหลดข้อมูลและวาด cluster
+  // โหลดข้อมูล + วาด cluster
   window.loadData = async () => {
     const parkCode = document.getElementById("parkSelect").value;
     const mode     = document.getElementById("modeSelect").value;
     const dateVal  = document.getElementById("dateInput").value;
     const dateKey  = mode === "monthly" ? dateVal.slice(0,7) : dateVal;
 
-    // เคลียร์ cluster เก่า
     if (clusterGroup) { map.removeLayer(clusterGroup); }
+    if (routeLayer)   { map.removeLayer(routeLayer); routeLayer = null; }
+    closeTimeline();
+
     clusterGroup = L.markerClusterGroup({
       maxClusterRadius: 60,
       iconCreateFunction: (cluster) => {
@@ -145,101 +187,138 @@
       }
     });
 
-    const dbPath = mode === "monthly"
-      ? `monthly/${dateKey}`
-      : `daily/${dateKey}`;
+    const dbPath = mode === "monthly" ? `monthly/${dateKey}` : `daily/${dateKey}`;
+    const snap   = await get(ref(db, dbPath));
+    const data   = snap.val();
 
-    const snap = await get(ref(db, dbPath));
-    const data = snap.val();
-
+    // เก็บข้อมูลทุก session แยกตาม uid
+    // allSessions = { uid: [ {lat, lng, t, code}, ... ] }
+    const allSessions = {};
     let totalPoints = 0;
-    let parkName = "ทุกอุทยาน";
 
-    if (!data) {
-      document.getElementById("statPoints").textContent   = "0";
-      document.getElementById("statVisitors").textContent = "0";
-      document.getElementById("statPark").textContent     = parkName;
-      document.getElementById("statDate").textContent     = dateKey;
-      map.addLayer(clusterGroup);
-      return;
-    }
+    if (data) {
+      Object.entries(data).forEach(([code, points]) => {
+        if (parkCode !== "all" && code !== parkCode) return;
+        const pts = typeof points === "object" && !Array.isArray(points)
+          ? Object.values(points) : points;
 
-    // วนแต่ละ parkCode
-    Object.entries(data).forEach(([code, points]) => {
-      if (parkCode !== "all" && code !== parkCode) return;
+        pts.forEach(pt => {
+          if (!pt.lat || !pt.lng) return;
+          totalPoints++;
+          const uid = pt.uid || "unknown";
 
-      // หาชื่ออุทยาน
-      const park = Object.values(parksData).find(p => p.code === code);
-      if (parkCode !== "all" && park) parkName = park.name;
+          if (!allSessions[uid]) allSessions[uid] = [];
+          allSessions[uid].push({ ...pt, code });
 
-      // points อาจเป็น array หรือ object
-      const pts = typeof points === "object" && !Array.isArray(points)
-        ? Object.values(points)
-        : points;
+          const marker = L.circleMarker([pt.lat, pt.lng], {
+            radius: 6, fillColor: "#38bdf8",
+            color: "white", weight: 1, fillOpacity: 0.8
+          });
 
-      pts.forEach(pt => {
-        if (!pt.lat || !pt.lng) return;
-        totalPoints++;
-        const marker = L.circleMarker([pt.lat, pt.lng], {
-          radius: 6, fillColor: "#38bdf8",
-          color: "white", weight: 1,
-          fillOpacity: 0.8
+          // กด marker → เปิด timeline ของ uid นั้น
+          marker.on("click", () => {
+            const session = allSessions[uid].sort((a,b) => a.t - b.t);
+            showTimeline(uid, session);
+          });
+
+          clusterGroup.addLayer(marker);
         });
-        clusterGroup.addLayer(marker);
       });
-    });
+    }
 
     map.addLayer(clusterGroup);
-    if (totalPoints > 0) {
-      map.fitBounds(clusterGroup.getBounds(), { padding: [40, 40] });
-    }
+    if (totalPoints > 0) map.fitBounds(clusterGroup.getBounds(), { padding: [40,40] });
 
-    // ประมาณนักท่องเที่ยว (10 นาที/ครั้ง = 6 จุด/ชม.)
+    const parkName = parkCode === "all" ? "ทุกอุทยาน"
+      : (Object.values(parksData).find(p => p.code === parkCode)?.name || parkCode);
     const estVisitors = Math.ceil(totalPoints / 6);
 
     document.getElementById("statPoints").textContent   = totalPoints.toLocaleString();
     document.getElementById("statVisitors").textContent = estVisitors.toLocaleString() + " คน";
-    document.getElementById("statPark").textContent     = parkCode === "all" ? "ทุกอุทยาน" : parkName;
+    document.getElementById("statPark").textContent     = parkName;
     document.getElementById("statDate").textContent     = dateKey;
   };
 
-  // สรุปรายวัน → เก็บเป็น monthly และลบ daily ที่ผ่านมาแล้ว
+  // แสดง Timeline Panel
+  window.showTimeline = (uid, points) => {
+    if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+
+    const panel = document.getElementById("timelinePanel");
+    panel.classList.add("open");
+
+    document.getElementById("tlUid").textContent = "Session: " + uid;
+
+    if (!points || points.length === 0) {
+      document.getElementById("tlContent").innerHTML = '<div id="tlEmpty">ไม่มีข้อมูล</div>';
+      return;
+    }
+
+    // วาดเส้นเส้นทาง
+    const latlngs = points.map(p => [p.lat, p.lng]);
+    routeLayer = L.polyline(latlngs, {
+      color: "#f59e0b", weight: 3, opacity: 0.8, dashArray: "6 4"
+    }).addTo(map);
+    map.fitBounds(routeLayer.getBounds(), { padding: [60,60] });
+
+    // สร้าง timeline items
+    let html = "";
+    points.forEach((pt, i) => {
+      const time = new Date(pt.t).toLocaleTimeString("th-TH");
+      const park = Object.values(parksData).find(p => p.code === pt.code);
+      const parkName = park ? park.name : pt.code;
+      html += `
+        <div class="tl-item">
+          <div class="tl-dot">${i+1}</div>
+          <div class="tl-body">
+            <div class="tl-time">🕐 ${time}</div>
+            <div class="tl-coord">📍 ${pt.lat.toFixed(5)}, ${pt.lng.toFixed(5)}</div>
+            <div class="tl-coord">🌿 ${parkName}</div>
+            <button class="tl-btn" onclick="flyTo(${pt.lat}, ${pt.lng})">
+              🔍 ดูบนแผนที่
+            </button>
+          </div>
+        </div>`;
+    });
+
+    document.getElementById("tlContent").innerHTML = html;
+  };
+
+  window.flyTo = (lat, lng) => {
+    map.flyTo([lat, lng], 17, { duration: 1 });
+  };
+
+  window.closeTimeline = () => {
+    document.getElementById("timelinePanel").classList.remove("open");
+    if (routeLayer) { map.removeLayer(routeLayer); routeLayer = null; }
+  };
+
+  // สรุปรายวัน → monthly
   window.runSummary = async () => {
     if (!confirm("สรุปข้อมูลรายวันและเก็บเป็นรายเดือน?")) return;
-
     const today = todayStr();
-    const month = monthStr();
-
     const dailySnap = await get(ref(db, "daily"));
     const dailyData = dailySnap.val();
     if (!dailyData) { alert("ไม่มีข้อมูลรายวัน"); return; }
 
     let summarized = 0;
-
     for (const [date, parks] of Object.entries(dailyData)) {
-      if (date >= today) continue; // ข้ามวันนี้
-
+      if (date >= today) continue;
       const m = date.slice(0,7);
       for (const [code, points] of Object.entries(parks)) {
         const pts = typeof points === "object" && !Array.isArray(points)
           ? Object.values(points) : points;
-
-        // ดึง monthly ที่มีอยู่แล้ว
         const monthSnap = await get(ref(db, `monthly/${m}/${code}`));
         const existing  = monthSnap.val() || [];
         const merged    = [...(Array.isArray(existing) ? existing : Object.values(existing)), ...pts];
-
         await set(ref(db, `monthly/${m}/${code}`), merged);
         await remove(ref(db, `daily/${date}/${code}`));
         summarized++;
       }
     }
-
     alert(`✅ สรุปเสร็จ ${summarized} อุทยาน/วัน`);
     loadData();
   };
 
-  // โหลดข้อมูลเริ่มต้น
   setTimeout(loadData, 1000);
 </script>
 
