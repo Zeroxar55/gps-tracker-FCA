@@ -155,7 +155,7 @@
 
       // 2) เก็บ log รายวัน (Heatmap ใช้)
       await push(ref(db, `daily/${todayStr()}/${parkCode}`), {
-        lat, lng, t: now
+        lat, lng, t: now, uid: userId
       });
 
       const time = new Date(now).toLocaleTimeString("th-TH");
