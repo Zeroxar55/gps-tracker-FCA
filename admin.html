@@ -20,7 +20,7 @@
       font-weight: bold; cursor: pointer;
     }
     #googleBtn:hover { background: #f1f5f9; }
-    #adminScreen { display: none; padding: 24px; max-width: 1000px; margin: 0 auto; }
+    #adminScreen { display: none; padding: 24px; max-width: 900px; margin: 0 auto; }
     #topbar {
       display: flex; justify-content: space-between; align-items: center;
       margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
@@ -60,11 +60,6 @@
     th { text-align: left; padding: 10px; font-size: 0.8rem; color: #64748b; border-bottom: 1px solid #334155; }
     td { padding: 12px 10px; border-bottom: 1px solid #1e293b; font-size: 0.9rem; vertical-align: middle; }
     tr:last-child td { border-bottom: none; }
-    .code-badge {
-      font-family: monospace; font-size: 0.95rem; font-weight: bold;
-      letter-spacing: 2px; color: #38bdf8; background: #0f172a;
-      padding: 4px 10px; border-radius: 6px; border: 1px solid #334155;
-    }
     .badge {
       display: inline-block; padding: 2px 10px; border-radius: 99px;
       font-size: 0.75rem; font-weight: bold;
@@ -115,14 +110,13 @@
         <tr>
           <th>ชื่ออุทยาน</th>
           <th>ภูมิภาค</th>
-          <th>รหัส Session</th>
           <th>สถานะ</th>
           <th>Monitor</th>
           <th>ลบ</th>
         </tr>
       </thead>
       <tbody id="parkList">
-        <tr><td colspan="6" id="emptyMsg">ยังไม่มีอุทยาน</td></tr>
+        <tr><td colspan="5" id="emptyMsg">ยังไม่มีอุทยาน</td></tr>
       </tbody>
     </table>
   </div>
@@ -130,9 +124,9 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged }
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-  import { getDatabase, ref, push, onValue, remove, set, get }
+  import { getDatabase, ref, push, onValue, remove, set }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
   const firebaseConfig = {
@@ -145,8 +139,7 @@
     appId: "1:652915365750:web:c3f0610fc7f63dda630c57"
   };
 
-  const ADMIN_EMAIL = "toktak1992@gmail.com"; // ← เปลี่ยนเป็น Gmail ของต๊อกกี้
-  const EXPIRE_MS = 24 * 60 * 60 * 1000; // 24 ชม. ต้องตรงกับ monitor.html
+  const ADMIN_EMAIL = "YOUR_GMAIL@gmail.com"; // ← เปลี่ยนเป็น Gmail ของต๊อกกี้
 
   const app  = initializeApp(firebaseConfig);
   const auth = getAuth(app);
@@ -170,30 +163,12 @@
     }
   });
 
-  window.loginWithGoogle = () => {
-    // ใช้ redirect แทน popup เพราะเสถียรกว่ามากบนมือถือ (popup มักโดนบล็อกเงียบๆ)
-    signInWithRedirect(auth, provider);
+  window.loginWithGoogle = async () => {
+    try { await signInWithPopup(auth, provider); }
+    catch(e) { document.getElementById("loginError").textContent = "❌ Login ไม่สำเร็จ"; }
   };
 
-  // เช็คผลลัพธ์หลังถูก redirect กลับมาจาก Google (ไว้จับ error ที่แท้จริง เช่น unauthorized-domain)
-  getRedirectResult(auth).catch((e) => {
-    document.getElementById("loginError").textContent = "❌ Login ไม่สำเร็จ: " + e.code;
-    console.error(e);
-  });
-
   window.logout = () => signOut(auth);
-
-  // สุ่มรหัส 6 ตัว และกันชนกับรหัสที่มีอยู่แล้ว
-  async function generateUniqueCode() {
-    const existingSnap = await get(ref(db, "parks"));
-    const existing = existingSnap.val() || {};
-    const usedCodes = new Set(Object.values(existing).map(p => p.code).filter(Boolean));
-    let code;
-    do {
-      code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    } while (usedCodes.has(code));
-    return code;
-  }
 
   // โหลดรายการอุทยาน
   function loadParks() {
@@ -201,62 +176,39 @@
       const tbody = document.getElementById("parkList");
       const data = snapshot.val();
       if (!data) {
-        tbody.innerHTML = '<tr><td colspan="6" id="emptyMsg" style="color:#64748b;text-align:center;padding:24px">ยังไม่มีอุทยาน</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" id="emptyMsg" style="color:#64748b;text-align:center;padding:24px">ยังไม่มีอุทยาน</td></tr>';
         return;
       }
       tbody.innerHTML = "";
       Object.entries(data).forEach(([id, park]) => {
         const monitorUrl = `https://zeroxar55.github.io/gps-tracker-FCA/monitor.html?park=${id}`;
-        const statusId = "status-" + id;
+        const isActive = park.activeSession ? true : false;
         tbody.innerHTML += `
           <tr>
             <td>${park.name}</td>
             <td>${park.region || "—"}</td>
-            <td>${park.code ? `<span class="code-badge">${park.code}</span>` : "<span style='color:#64748b'>— ไม่มีรหัส —</span>"}</td>
-            <td id="${statusId}"><span class="badge badge-idle">⚪ กำลังเช็ค...</span></td>
+            <td><span class="badge ${isActive ? 'badge-active' : 'badge-idle'}">${isActive ? '🟢 Active' : '⚪ ว่าง'}</span></td>
             <td><a class="btn-monitor" href="${monitorUrl}" target="_blank">เปิด Monitor</a></td>
             <td><button class="btn-danger" onclick="deletePark('${id}')">ลบ</button></td>
           </tr>`;
-
-        // เช็คจำนวนคนที่กำลังแชร์ตำแหน่งอยู่ตอนนี้ (ไม่หมดอายุ 24 ชม.) ของรหัสนี้
-        if (park.code) {
-          get(ref(db, "sessions/" + park.code)).then((sessSnap) => {
-            const sessions = sessSnap.val() || {};
-            const now = Date.now();
-            const activeCount = Object.values(sessions)
-              .filter(s => s && s.updatedAt && (now - s.updatedAt) <= EXPIRE_MS).length;
-            const el = document.getElementById(statusId);
-            if (!el) return;
-            el.innerHTML = activeCount > 0
-              ? `<span class="badge badge-active">🟢 ${activeCount} คน</span>`
-              : `<span class="badge badge-idle">⚪ ว่าง</span>`;
-          });
-        } else {
-          const el = document.getElementById(statusId);
-          if (el) el.innerHTML = `<span class="badge badge-idle">⚪ ว่าง</span>`;
-        }
       });
     });
   }
 
-  // เพิ่มอุทยาน — สร้างรหัส Session ตายตัวให้เลยตอนสร้าง
+  // เพิ่มอุทยาน
   window.addPark = async () => {
     const name   = document.getElementById("parkName").value.trim();
     const region = document.getElementById("parkRegion").value.trim();
     if (!name) { alert("กรุณากรอกชื่ออุทยาน"); return; }
-    const code = await generateUniqueCode();
-    await push(ref(db, "parks"), { name, region, code, createdAt: Date.now() });
+    await push(ref(db, "parks"), { name, region, createdAt: Date.now() });
     document.getElementById("parkName").value = "";
     document.getElementById("parkRegion").value = "";
   };
 
-  // ลบอุทยาน (ลบข้อมูล session ของอุทยานนั้นทิ้งด้วย)
+  // ลบอุทยาน
   window.deletePark = async (id) => {
-    if (!confirm("ลบอุทยานนี้? ตำแหน่งทั้งหมดที่แชร์อยู่ภายใต้รหัสนี้จะถูกลบไปด้วย")) return;
-    const snap = await get(ref(db, "parks/" + id + "/code"));
-    const code = snap.val();
+    if (!confirm("ลบอุทยานนี้?")) return;
     await remove(ref(db, "parks/" + id));
-    if (code) await remove(ref(db, "sessions/" + code));
   };
 </script>
 
