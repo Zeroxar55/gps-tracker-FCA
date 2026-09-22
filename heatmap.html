@@ -3,64 +3,80 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GPS Monitor</title>
+  <title>Heatmap — GPS Tracker</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: sans-serif; background: #0f172a; color: #f1f5f9; height: 100vh; display: flex; flex-direction: column; }
     #topbar {
-      display: flex; align-items: center; gap: 12px;
       padding: 12px 16px; background: #1e293b;
-      border-bottom: 1px solid #334155; flex-wrap: wrap;
+      border-bottom: 1px solid #334155;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
     }
     #topbar h1 { font-size: 1rem; white-space: nowrap; }
-    select {
+    select, #dateInput {
       padding: 8px 12px; background: #0f172a; color: #f1f5f9;
-      border: 1px solid #38bdf8; border-radius: 8px;
-      font-size: 0.9rem; min-width: 200px;
+      border: 1px solid #38bdf8; border-radius: 8px; font-size: 0.9rem;
     }
-    #codeBox {
-      background: #0f172a; border: 2px solid #38bdf8;
-      border-radius: 8px; padding: 4px 14px; text-align: center;
+    .btn {
+      padding: 8px 16px; border: none; border-radius: 8px;
+      font-size: 0.85rem; font-weight: bold; cursor: pointer;
     }
-    #codeBox .label { font-size: 0.65rem; color: #64748b; }
-    #codeBox .code  { font-size: 1.4rem; font-weight: bold; letter-spacing: 6px; color: #38bdf8; }
-    #status  { font-size: 0.8rem; color: #94a3b8; flex: 1; }
-    #countBox { font-size: 0.85rem; color: #f1f5f9; white-space: nowrap;
-      background: #334155; padding: 6px 14px; border-radius: 8px; }
+    .btn-blue  { background: #0ea5e9; color: white; }
+    .btn-gray  { background: #334155; color: #f1f5f9; }
+    #statsBar {
+      padding: 8px 16px; background: #1e293b;
+      border-bottom: 1px solid #334155;
+      display: flex; gap: 20px; flex-wrap: wrap; font-size: 0.82rem; color: #94a3b8;
+    }
+    #statsBar span { color: #f1f5f9; font-weight: bold; }
     #map { flex: 1; }
-    #waitScreen {
-      flex: 1; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 8px;
+    #modeBar {
+      display: flex; gap: 8px; align-items: center;
     }
-    #waitScreen p { color: #64748b; font-size: 0.9rem; }
+    .mode-btn {
+      padding: 6px 14px; border: 1px solid #334155; border-radius: 8px;
+      background: transparent; color: #94a3b8; cursor: pointer; font-size: 0.82rem;
+    }
+    .mode-btn.active { background: #0ea5e9; border-color: #0ea5e9; color: white; }
   </style>
 </head>
 <body>
 
 <div id="topbar">
-  <h1>📍 GPS Monitor</h1>
-  <select id="parkSelect" onchange="selectPark()">
-    <option value="">— เลือกอุทยาน —</option>
+  <h1>🗺️ Heatmap</h1>
+
+  <select id="parkSelect" onchange="loadData()">
+    <option value="all">🌿 ทุกอุทยาน</option>
   </select>
-  <div id="codeBox">
-    <div class="label">PARK CODE</div>
-    <div class="code" id="codeDisplay">------</div>
-  </div>
-  <div id="status">⏳ เลือกอุทยานก่อน</div>
-  <div id="countBox">👥 0 คน</div>
+
+  <select id="modeSelect" onchange="loadData()">
+    <option value="daily">รายวัน</option>
+    <option value="monthly">รายเดือน</option>
+  </select>
+
+  <input type="date" id="dateInput" onchange="loadData()">
+
+  <button class="btn btn-blue" onclick="loadData()">🔄 โหลด</button>
+  <button class="btn btn-gray" onclick="runSummary()">📊 สรุปวันนี้</button>
 </div>
 
-<div id="waitScreen">
-  <h2 style="color:#334155">🌿</h2>
-  <p>เลือกอุทยานจาก dropdown ด้านบน</p>
+<div id="statsBar">
+  <div>อุทยาน: <span id="statPark">—</span></div>
+  <div>จุดทั้งหมด: <span id="statPoints">—</span></div>
+  <div>นักท่องเที่ยว (ประมาณ): <span id="statVisitors">—</span></div>
+  <div>วันที่: <span id="statDate">—</span></div>
 </div>
-<div id="map" style="display:none;"></div>
+
+<div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getDatabase, ref, onValue, remove }
+  import { getDatabase, ref, onValue, get, set, remove }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
   const firebaseConfig = {
@@ -76,133 +92,155 @@
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
 
-  let map         = null;
-  let markers     = {};
-  let circles     = {};
-  let parkListener = null;
-  let parksData   = {};
+  // set default date = today
+  function todayStr() {
+    return new Date(Date.now() + 7*3600000).toISOString().slice(0,10);
+  }
+  function monthStr() {
+    return todayStr().slice(0,7);
+  }
+  document.getElementById("dateInput").value = todayStr();
 
-  // โหลด dropdown อุทยาน
+  // Init map
+  const map = L.map("map").setView([18.0, 100.5], 7);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "© OpenStreetMap"
+  }).addTo(map);
+
+  let clusterGroup = null;
+  let parksData = {};
+
+  // โหลดรายการอุทยาน
   onValue(ref(db, "parks"), (snap) => {
     parksData = snap.val() || {};
     const select = document.getElementById("parkSelect");
-    const current = select.value;
-    select.innerHTML = '<option value="">— เลือกอุทยาน —</option>';
+    select.innerHTML = '<option value="all">🌿 ทุกอุทยาน</option>';
     Object.entries(parksData).forEach(([id, park]) => {
-      select.innerHTML += `<option value="${id}" ${id===current?'selected':''}>
-        ${park.name}${park.region ? ' ('+park.region+')' : ''} — ${park.code}
-      </option>`;
+      select.innerHTML += `<option value="${park.code}">${park.name}${park.region ? ' ('+park.region+')' : ''}</option>`;
     });
   });
 
-  window.selectPark = () => {
-    const parkId = document.getElementById("parkSelect").value;
-    if (!parkId) {
-      document.getElementById("waitScreen").style.display = "flex";
-      document.getElementById("map").style.display = "none";
-      document.getElementById("codeDisplay").textContent = "------";
-      document.getElementById("status").textContent = "⏳ เลือกอุทยานก่อน";
-      document.getElementById("countBox").textContent = "👥 0 คน";
+  // โหลดข้อมูลและวาด cluster
+  window.loadData = async () => {
+    const parkCode = document.getElementById("parkSelect").value;
+    const mode     = document.getElementById("modeSelect").value;
+    const dateVal  = document.getElementById("dateInput").value;
+    const dateKey  = mode === "monthly" ? dateVal.slice(0,7) : dateVal;
+
+    // เคลียร์ cluster เก่า
+    if (clusterGroup) { map.removeLayer(clusterGroup); }
+    clusterGroup = L.markerClusterGroup({
+      maxClusterRadius: 60,
+      iconCreateFunction: (cluster) => {
+        const count = cluster.getChildCount();
+        const size  = count > 100 ? 50 : count > 30 ? 40 : 30;
+        const color = count > 100 ? "#ef4444" : count > 30 ? "#f59e0b" : "#22c55e";
+        return L.divIcon({
+          html: `<div style="width:${size}px;height:${size}px;border-radius:50%;
+                 background:${color};opacity:0.85;display:flex;align-items:center;
+                 justify-content:center;color:white;font-weight:bold;font-size:${size>40?14:12}px;
+                 border:2px solid white">${count}</div>`,
+          iconSize: [size, size], className: ""
+        });
+      }
+    });
+
+    const dbPath = mode === "monthly"
+      ? `monthly/${dateKey}`
+      : `daily/${dateKey}`;
+
+    const snap = await get(ref(db, dbPath));
+    const data = snap.val();
+
+    let totalPoints = 0;
+    let parkName = "ทุกอุทยาน";
+
+    if (!data) {
+      document.getElementById("statPoints").textContent   = "0";
+      document.getElementById("statVisitors").textContent = "0";
+      document.getElementById("statPark").textContent     = parkName;
+      document.getElementById("statDate").textContent     = dateKey;
+      map.addLayer(clusterGroup);
       return;
     }
 
-    const park = parksData[parkId];
-    const code = park.code;
+    // วนแต่ละ parkCode
+    Object.entries(data).forEach(([code, points]) => {
+      if (parkCode !== "all" && code !== parkCode) return;
 
-    document.getElementById("codeDisplay").textContent = code;
-    document.getElementById("waitScreen").style.display = "none";
-    document.getElementById("map").style.display = "block";
+      // หาชื่ออุทยาน
+      const park = Object.values(parksData).find(p => p.code === code);
+      if (parkCode !== "all" && park) parkName = park.name;
 
-    // Init map ครั้งแรก
-    if (!map) {
-      map = L.map("map").setView([18.7883, 98.9853], 10);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "© OpenStreetMap"
-      }).addTo(map);
-    }
-    setTimeout(() => map.invalidateSize(), 100);
+      // points อาจเป็น array หรือ object
+      const pts = typeof points === "object" && !Array.isArray(points)
+        ? Object.values(points)
+        : points;
 
-    // เคลียร์ marker เก่า
-    Object.values(markers).forEach(m => map.removeLayer(m));
-    Object.values(circles).forEach(c => map.removeLayer(c));
-    markers = {}; circles = {};
-
-    // หยุด listener เก่า
-    if (parkListener) parkListener();
-
-    document.getElementById("status").textContent = "⏳ รอนักท่องเที่ยว...";
-
-    // ฟัง sessions ของอุทยานนี้
-    parkListener = onValue(ref(db, "sessions/" + code), (snap) => {
-      const data  = snap.val();
-      const now   = Date.now();
-      const LIMIT = 24 * 60 * 60 * 1000;
-
-      // ลบ marker ที่หายไป
-      const activeIds = data ? Object.keys(data) : [];
-      Object.keys(markers).forEach(uid => {
-        if (!activeIds.includes(uid)) {
-          map.removeLayer(markers[uid]);
-          map.removeLayer(circles[uid]);
-          delete markers[uid];
-          delete circles[uid];
-        }
+      pts.forEach(pt => {
+        if (!pt.lat || !pt.lng) return;
+        totalPoints++;
+        const marker = L.circleMarker([pt.lat, pt.lng], {
+          radius: 6, fillColor: "#38bdf8",
+          color: "white", weight: 1,
+          fillOpacity: 0.8
+        });
+        clusterGroup.addLayer(marker);
       });
-
-      if (!data) {
-        document.getElementById("status").textContent   = "⏳ ยังไม่มีนักท่องเที่ยว";
-        document.getElementById("countBox").textContent = "👥 0 คน";
-        return;
-      }
-
-      let count = 0;
-      let firstFix = Object.keys(markers).length === 0;
-
-      Object.entries(data).forEach(([uid, d]) => {
-        // Auto-terminate 24 ชม.
-        if (now - d.startedAt > LIMIT) {
-          remove(ref(db, "sessions/" + code + "/" + uid));
-          return;
-        }
-
-        count++;
-        const { lat, lng, accuracy, updatedAt } = d;
-        const timeStr = new Date(updatedAt).toLocaleTimeString("th-TH");
-        const popup = `
-          <div style="min-width:160px">
-            <b>🧭 นักท่องเที่ยว</b><br>
-            <small>อัปเดต: ${timeStr}</small><br>
-            <small>±${accuracy}ม.</small><br>
-            <button onclick="window.terminateUser('${code}','${uid}')"
-              style="margin-top:8px;padding:6px 0;background:#ef4444;
-              color:white;border:none;border-radius:6px;cursor:pointer;width:100%;font-size:0.85rem">
-              ⛔ Terminate
-            </button>
-          </div>`;
-
-        if (!markers[uid]) {
-          markers[uid] = L.marker([lat, lng]).addTo(map).bindPopup(popup);
-          circles[uid] = L.circle([lat, lng], {
-            radius: accuracy, color: "#38bdf8", fillOpacity: 0.1
-          }).addTo(map);
-        } else {
-          markers[uid].setLatLng([lat, lng]).setPopupContent(popup);
-          circles[uid].setLatLng([lat, lng]).setRadius(accuracy);
-        }
-
-        if (firstFix) { map.setView([lat, lng], 15); firstFix = false; }
-      });
-
-      document.getElementById("countBox").textContent = `👥 ${count} คน`;
-      document.getElementById("status").textContent   =
-        count > 0 ? `🟢 Tracking — ${park.name}` : "⏳ ยังไม่มีนักท่องเที่ยว";
     });
+
+    map.addLayer(clusterGroup);
+    if (totalPoints > 0) {
+      map.fitBounds(clusterGroup.getBounds(), { padding: [40, 40] });
+    }
+
+    // ประมาณนักท่องเที่ยว (10 นาที/ครั้ง = 6 จุด/ชม.)
+    const estVisitors = Math.ceil(totalPoints / 6);
+
+    document.getElementById("statPoints").textContent   = totalPoints.toLocaleString();
+    document.getElementById("statVisitors").textContent = estVisitors.toLocaleString() + " คน";
+    document.getElementById("statPark").textContent     = parkCode === "all" ? "ทุกอุทยาน" : parkName;
+    document.getElementById("statDate").textContent     = dateKey;
   };
 
-  window.terminateUser = async (code, uid) => {
-    if (!confirm("ลบนักท่องเที่ยวคนนี้?")) return;
-    await remove(ref(db, "sessions/" + code + "/" + uid));
+  // สรุปรายวัน → เก็บเป็น monthly และลบ daily ที่ผ่านมาแล้ว
+  window.runSummary = async () => {
+    if (!confirm("สรุปข้อมูลรายวันและเก็บเป็นรายเดือน?")) return;
+
+    const today = todayStr();
+    const month = monthStr();
+
+    const dailySnap = await get(ref(db, "daily"));
+    const dailyData = dailySnap.val();
+    if (!dailyData) { alert("ไม่มีข้อมูลรายวัน"); return; }
+
+    let summarized = 0;
+
+    for (const [date, parks] of Object.entries(dailyData)) {
+      if (date >= today) continue; // ข้ามวันนี้
+
+      const m = date.slice(0,7);
+      for (const [code, points] of Object.entries(parks)) {
+        const pts = typeof points === "object" && !Array.isArray(points)
+          ? Object.values(points) : points;
+
+        // ดึง monthly ที่มีอยู่แล้ว
+        const monthSnap = await get(ref(db, `monthly/${m}/${code}`));
+        const existing  = monthSnap.val() || [];
+        const merged    = [...(Array.isArray(existing) ? existing : Object.values(existing)), ...pts];
+
+        await set(ref(db, `monthly/${m}/${code}`), merged);
+        await remove(ref(db, `daily/${date}/${code}`));
+        summarized++;
+      }
+    }
+
+    alert(`✅ สรุปเสร็จ ${summarized} อุทยาน/วัน`);
+    loadData();
   };
+
+  // โหลดข้อมูลเริ่มต้น
+  setTimeout(loadData, 1000);
 </script>
 
 </body>
