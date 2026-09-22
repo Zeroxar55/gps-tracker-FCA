@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GPS Monitor — เจ้าหน้าที่</title>
+  <title>GPS Monitor</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -14,91 +14,150 @@
       border-bottom: 1px solid #334155; flex-wrap: wrap;
     }
     #topbar h1 { font-size: 1rem; white-space: nowrap; }
-    #sessionCode {
-      font-size: 2rem; font-weight: bold; letter-spacing: 8px;
-      color: #38bdf8; background: #0f172a;
-      border: 2px solid #38bdf8; border-radius: 8px;
-      padding: 4px 16px; min-width: 160px; text-align: center;
+    select {
+      padding: 8px 12px; background: #0f172a; color: #f1f5f9;
+      border: 1px solid #334155; border-radius: 8px; font-size: 0.9rem;
     }
+    #sessionBox {
+      display: flex; flex-direction: column; align-items: center;
+      background: #0f172a; border: 2px solid #38bdf8;
+      border-radius: 8px; padding: 4px 12px; min-width: 140px;
+    }
+    #sessionBox .label { font-size: 0.65rem; color: #64748b; }
+    #sessionCode { font-size: 1.6rem; font-weight: bold; letter-spacing: 6px; color: #38bdf8; }
     #status { font-size: 0.8rem; color: #94a3b8; flex: 1; }
     #terminateBtn {
       padding: 10px 20px; background: #ef4444; color: white;
       border: none; border-radius: 8px; font-size: 0.9rem;
       font-weight: bold; cursor: pointer; white-space: nowrap;
     }
-    #terminateBtn:hover { background: #dc2626; }
+    #terminateBtn:disabled { background: #334155; cursor: not-allowed; }
     #map { flex: 1; }
     #infobar {
       padding: 8px 16px; background: #1e293b;
       border-top: 1px solid #334155;
       font-size: 0.8rem; color: #94a3b8;
-      display: flex; gap: 24px;
+      display: flex; gap: 24px; flex-wrap: wrap;
     }
-    .info-item span { color: #f1f5f9; font-weight: bold; }
+    #infobar span { color: #f1f5f9; font-weight: bold; }
+    #selectScreen {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; flex: 1; gap: 16px;
+    }
+    #selectScreen h2 { color: #94a3b8; }
   </style>
 </head>
 <body>
 
-  <div id="topbar">
-    <h1>📍 GPS Monitor</h1>
-    <div>
-      <div style="font-size:0.7rem;color:#64748b;margin-bottom:2px">SESSION CODE</div>
-      <div id="sessionCode">------</div>
-    </div>
-    <div id="status">⏳ รอการเชื่อมต่อ...</div>
-    <button id="terminateBtn" onclick="terminate()">⛔ Terminate</button>
+<div id="topbar">
+  <h1>📍 GPS Monitor</h1>
+  <select id="parkSelect" onchange="selectPark()">
+    <option value="">— เลือกอุทยาน —</option>
+  </select>
+  <div id="sessionBox">
+    <div class="label">SESSION CODE</div>
+    <div id="sessionCode">------</div>
   </div>
+  <div id="status">⏳ เลือกอุทยานก่อน</div>
+  <button id="terminateBtn" onclick="terminate()" disabled>⛔ Terminate</button>
+</div>
 
-  <div id="map"></div>
+<div id="selectScreen">
+  <h2>🌿 กรุณาเลือกอุทยานด้านบน</h2>
+</div>
+<div id="map" style="display:none; flex:1;"></div>
 
-  <div id="infobar">
-    <div class="info-item">ละติจูด: <span id="infoLat">—</span></div>
-    <div class="info-item">ลองจิจูด: <span id="infoLng">—</span></div>
-    <div class="info-item">ความแม่นยำ: <span id="infoAcc">—</span></div>
-    <div class="info-item">อัปเดตล่าสุด: <span id="infoTime">—</span></div>
-  </div>
+<div id="infobar">
+  <div>ละติจูด: <span id="infoLat">—</span></div>
+  <div>ลองจิจูด: <span id="infoLng">—</span></div>
+  <div>ความแม่นยำ: <span id="infoAcc">—</span></div>
+  <div>อัปเดตล่าสุด: <span id="infoTime">—</span></div>
+</div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getDatabase, ref, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, onValue, remove, get }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyAb6EUMSsuaC9Ou1FrWfIgOiDY-_1fuEW4",
-      authDomain: "tracking-system-test-fca.firebaseapp.com",
-      databaseURL: "https://tracking-system-test-fca-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "tracking-system-test-fca",
-      storageBucket: "tracking-system-test-fca.firebasestorage.app",
-      messagingSenderId: "652915365750",
-      appId: "1:652915365750:web:c3f0610fc7f63dda630c57"
-    };
+  const firebaseConfig = {
+    apiKey: "AIzaSyAb6EUMSsuaC9Ou1FrWfIgOiDY-_1fuEW4",
+    authDomain: "tracking-system-test-fca.firebaseapp.com",
+    databaseURL: "https://tracking-system-test-fca-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "tracking-system-test-fca",
+    storageBucket: "tracking-system-test-fca.firebasestorage.app",
+    messagingSenderId: "652915365750",
+    appId: "1:652915365750:web:c3f0610fc7f63dda630c57"
+  };
 
-    const app = initializeApp(firebaseConfig);
-    const db  = getDatabase(app);
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
 
-    // สร้าง session code 6 ตัว
-    const code = Math.random().toString(36).substring(2,8).toUpperCase();
-    document.getElementById("sessionCode").textContent = code;
+  let map = null;
+  let marker = null;
+  let circle = null;
+  let currentParkId = null;
+  let sessionCode = null;
+  let unsubscribe = null;
 
-    // Init map — เริ่มที่เชียงใหม่
-    const map = L.map("map").setView([18.7883, 98.9853], 13);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "© OpenStreetMap"
-    }).addTo(map);
+  // โหลดรายการอุทยาน
+  onValue(ref(db, "parks"), (snapshot) => {
+    const select = document.getElementById("parkSelect");
+    const data = snapshot.val();
+    select.innerHTML = '<option value="">— เลือกอุทยาน —</option>';
+    if (!data) return;
+    Object.entries(data).forEach(([id, park]) => {
+      select.innerHTML += `<option value="${id}">${park.name}${park.region ? ' ('+park.region+')' : ''}</option>`;
+    });
+  });
 
-    let marker = null;
-    let circle = null;
+  // เลือกอุทยาน
+  window.selectPark = async () => {
+    const select = document.getElementById("parkSelect");
+    const parkId = select.value;
+    if (!parkId) return;
+
+    currentParkId = parkId;
+
+    // ดึง code จาก Firebase (ถ้าไม่มีให้สร้างใหม่)
+    const codeSnap = await get(ref(db, "parks/" + parkId + "/sessionCode"));
+    if (codeSnap.exists()) {
+      sessionCode = codeSnap.val();
+    } else {
+      sessionCode = Math.random().toString(36).substring(2,8).toUpperCase();
+      const { set } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js");
+      await set(ref(db, "parks/" + parkId + "/sessionCode"), sessionCode);
+    }
+
+    document.getElementById("sessionCode").textContent = sessionCode;
+    document.getElementById("terminateBtn").disabled = false;
+
+    // เปิดแผนที่
+    document.getElementById("selectScreen").style.display = "none";
+    document.getElementById("map").style.display = "block";
+
+    if (!map) {
+      map = L.map("map").setView([18.7883, 98.9853], 13);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "© OpenStreetMap"
+      }).addTo(map);
+    }
+    setTimeout(() => map.invalidateSize(), 100);
+
+    // เคลียร์ listener เก่า
+    if (unsubscribe) unsubscribe();
+    if (marker) { map.removeLayer(marker); marker = null; }
+    if (circle) { map.removeLayer(circle); circle = null; }
+
     let firstFix = true;
+    document.getElementById("status").textContent = "⏳ รอนักท่องเที่ยวแชร์ตำแหน่ง...";
 
-    // ฟัง realtime จาก Firebase
-    const sessionRef = ref(db, "sessions/" + code);
-    onValue(sessionRef, (snapshot) => {
-      const data = snapshot.val();
+    // ฟัง GPS realtime
+    unsubscribe = onValue(ref(db, "sessions/" + sessionCode), (snap) => {
+      const data = snap.val();
       if (!data) return;
-
       const { lat, lng, accuracy, updatedAt } = data;
 
-      // วาง marker
       if (!marker) {
         marker = L.marker([lat, lng]).addTo(map).bindPopup("📍 ตำแหน่งปัจจุบัน").openPopup();
         circle = L.circle([lat, lng], { radius: accuracy, color: "#38bdf8", fillOpacity: 0.1 }).addTo(map);
@@ -109,24 +168,29 @@
 
       if (firstFix) { map.setView([lat, lng], 16); firstFix = false; }
 
-      // อัปเดต infobar
       document.getElementById("infoLat").textContent  = lat.toFixed(6);
       document.getElementById("infoLng").textContent  = lng.toFixed(6);
       document.getElementById("infoAcc").textContent  = "±" + accuracy + "ม.";
       document.getElementById("infoTime").textContent = new Date(updatedAt).toLocaleTimeString("th-TH");
-      document.getElementById("status").textContent   = "🟢 กำลัง Tracking — session: " + code;
+      document.getElementById("status").textContent   = "🟢 กำลัง Tracking — " + sessionCode;
     });
+  };
 
-    // Terminate
-    window.terminate = async function() {
-      if (!confirm("ยืนยันหยุด Tracking และลบข้อมูล?")) return;
-      await remove(sessionRef);
-      document.getElementById("status").textContent = "🔴 Terminated — ลบข้อมูลแล้ว";
-      document.getElementById("terminateBtn").disabled = true;
-      if (marker) map.removeLayer(marker);
-      if (circle) map.removeLayer(circle);
-    };
-  </script>
+  // Terminate
+  window.terminate = async () => {
+    if (!sessionCode) return;
+    if (!confirm("ยืนยันหยุด Tracking และลบข้อมูล?")) return;
+    await remove(ref(db, "sessions/" + sessionCode));
+    document.getElementById("status").textContent = "🔴 Terminated";
+    document.getElementById("terminateBtn").disabled = true;
+    if (marker) { map.removeLayer(marker); marker = null; }
+    if (circle) { map.removeLayer(circle); circle = null; }
+    document.getElementById("infoLat").textContent = "—";
+    document.getElementById("infoLng").textContent = "—";
+    document.getElementById("infoAcc").textContent = "—";
+    document.getElementById("infoTime").textContent = "—";
+  };
+</script>
 
 </body>
 </html>
