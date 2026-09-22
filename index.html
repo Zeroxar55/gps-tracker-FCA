@@ -17,7 +17,7 @@
       display: flex; flex-direction: column; align-items: center; gap: 16px;
     }
     h1 { font-size: 1.3rem; text-align: center; }
-    p { font-size: 0.85rem; color: #94a3b8; text-align: center; }
+    p  { font-size: 0.85rem; color: #94a3b8; text-align: center; }
     input {
       width: 100%; padding: 14px 16px;
       font-size: 1.8rem; letter-spacing: 10px; text-align: center;
@@ -26,31 +26,20 @@
       text-transform: uppercase;
     }
     input:focus { border-color: #38bdf8; }
-    .btn {
-      width: 100%; padding: 14px; font-size: 1rem; font-weight: bold;
-      border: none; border-radius: 12px; cursor: pointer;
-    }
+    .btn { width: 100%; padding: 14px; font-size: 1rem; font-weight: bold; border: none; border-radius: 12px; cursor: pointer; }
     .btn-start { background: #0ea5e9; color: white; }
     .btn-start:disabled { background: #334155; cursor: not-allowed; }
-    .btn-stop { background: #ef4444; color: white; display: none; }
+    .btn-stop  { background: #ef4444; color: white; }
     #status { font-size: 0.85rem; color: #38bdf8; text-align: center; min-height: 20px; }
-    #error { font-size: 0.85rem; color: #f87171; text-align: center; min-height: 20px; }
-    #parkInfo {
-      font-size: 0.9rem; color: #34d399; text-align: center;
-      font-weight: bold; display: none;
-    }
-    #doneScreen {
-      display: none; flex-direction: column;
-      align-items: center; gap: 12px; text-align: center;
-    }
+    #error  { font-size: 0.85rem; color: #f87171; text-align: center; min-height: 20px; }
+    #parkInfo { font-size: 0.9rem; color: #34d399; text-align: center; font-weight: bold; display: none; }
+    #doneScreen { display: none; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
     #doneScreen h2 { font-size: 1.2rem; color: #34d399; }
-    #doneScreen p { color: #94a3b8; font-size: 0.85rem; }
   </style>
 </head>
 <body>
 <div class="card">
 
-  <!-- หน้าแรก: กรอกรหัส -->
   <div id="inputScreen" style="width:100%;display:flex;flex-direction:column;align-items:center;gap:16px">
     <h1>📍 แชร์ตำแหน่ง</h1>
     <p>กรอกรหัสอุทยานที่ได้รับจากเจ้าหน้าที่</p>
@@ -61,18 +50,14 @@
     <button class="btn btn-start" id="startBtn" onclick="startTracking()">เริ่มแชร์ตำแหน่ง</button>
   </div>
 
-  <!-- หน้า tracking -->
   <div id="trackingScreen" style="width:100%;display:none;flex-direction:column;align-items:center;gap:16px">
     <h1>📡 กำลังแชร์ตำแหน่ง</h1>
     <div id="parkInfo2" style="font-size:0.9rem;color:#34d399;font-weight:bold;text-align:center"></div>
     <div id="status"></div>
     <div id="timer" style="font-size:0.8rem;color:#64748b;text-align:center"></div>
-    <button class="btn btn-stop" id="stopBtn" onclick="stopTracking()" style="display:block">
-      ⛔ หยุดแชร์ตำแหน่ง
-    </button>
+    <button class="btn btn-stop" onclick="stopTracking()">⛔ หยุดแชร์ตำแหน่ง</button>
   </div>
 
-  <!-- หน้า done -->
   <div id="doneScreen">
     <h2>✅ หยุดแชร์แล้ว</h2>
     <p>ขอบคุณที่ใช้บริการ<br>ข้อมูลตำแหน่งถูกลบแล้ว</p>
@@ -82,7 +67,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getDatabase, ref, set, remove, onValue }
+  import { getDatabase, ref, set, remove, push, onValue }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
   const firebaseConfig = {
@@ -98,33 +83,32 @@
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
 
-  // gen userId ของนักท่องเที่ยวคนนี้
-  const userId = "user_" + Math.random().toString(36).substring(2, 10);
-
-  let parkCode    = null;
-  let intervalId  = null;
-  let startedAt   = null;
-  let timerInterval = null;
+  const userId  = "user_" + Math.random().toString(36).substring(2, 10);
+  let parkCode  = null;
+  let startedAt = null;
+  let intervalId, timerInterval;
   const LIMIT_24H = 24 * 60 * 60 * 1000;
 
-  // เช็ครหัสอุทยานแบบ realtime ขณะพิมพ์
+  // helper — วันนี้ YYYY-MM-DD (ไทย UTC+7)
+  function todayStr() {
+    const d = new Date(Date.now() + 7*3600000);
+    return d.toISOString().slice(0,10);
+  }
+
+  // เช็ครหัสขณะพิมพ์
   document.getElementById("codeInput").addEventListener("input", () => {
     const code = document.getElementById("codeInput").value.trim().toUpperCase();
     const parkInfo = document.getElementById("parkInfo");
     const error    = document.getElementById("error");
     if (code.length < 6) { parkInfo.style.display = "none"; error.textContent = ""; return; }
-
     onValue(ref(db, "parks"), (snap) => {
       const data = snap.val();
-      if (!data) { error.textContent = "❌ ไม่พบรหัสนี้"; parkInfo.style.display = "none"; return; }
-      const park = Object.values(data).find(p => p.code === code);
+      const park = data ? Object.values(data).find(p => p.code === code) : null;
       if (park) {
         parkInfo.textContent = `🌿 ${park.name}${park.region ? ' — '+park.region : ''}`;
-        parkInfo.style.display = "block";
-        error.textContent = "";
+        parkInfo.style.display = "block"; error.textContent = "";
       } else {
-        parkInfo.style.display = "none";
-        error.textContent = "❌ ไม่พบรหัสนี้";
+        parkInfo.style.display = "none"; error.textContent = "❌ ไม่พบรหัสนี้";
       }
     }, { onlyOnce: true });
   });
@@ -133,33 +117,23 @@
     const code = document.getElementById("codeInput").value.trim().toUpperCase();
     if (code.length < 6) { document.getElementById("error").textContent = "⚠️ กรอกรหัสให้ครบ 6 ตัว"; return; }
 
-    // ตรวจสอบรหัสอีกครั้ง
     const snap = await new Promise(res => onValue(ref(db, "parks"), res, { onlyOnce: true }));
-    const data = snap.val();
-    const park = data ? Object.values(data).find(p => p.code === code) : null;
+    const park = snap.val() ? Object.values(snap.val()).find(p => p.code === code) : null;
     if (!park) { document.getElementById("error").textContent = "❌ ไม่พบรหัสนี้"; return; }
-
-    if (!navigator.geolocation) {
-      document.getElementById("error").textContent = "❌ เบราว์เซอร์ไม่รองรับ GPS";
-      return;
-    }
+    if (!navigator.geolocation) { document.getElementById("error").textContent = "❌ เบราว์เซอร์ไม่รองรับ GPS"; return; }
 
     parkCode  = code;
     startedAt = Date.now();
 
-    // สลับหน้า
-    document.getElementById("inputScreen").style.display   = "none";
+    document.getElementById("inputScreen").style.display    = "none";
     document.getElementById("trackingScreen").style.display = "flex";
     document.getElementById("parkInfo2").textContent = `🌿 ${park.name}${park.region ? ' — '+park.region : ''}`;
     document.getElementById("status").textContent = "⏳ กำลังขอ GPS...";
 
     sendLocation();
-    intervalId = setInterval(sendLocation, 10 * 60 * 1000); // ทุก 10 นาที
-
-    // นับเวลา
+    intervalId    = setInterval(sendLocation, 10 * 60 * 1000);
     timerInterval = setInterval(() => {
-      const elapsed = Date.now() - startedAt;
-      const remaining = LIMIT_24H - elapsed;
+      const remaining = LIMIT_24H - (Date.now() - startedAt);
       if (remaining <= 0) { stopTracking(); return; }
       const h = Math.floor(remaining / 3600000);
       const m = Math.floor((remaining % 3600000) / 60000);
@@ -167,38 +141,34 @@
     }, 60000);
   };
 
-  function sendLocation() {
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude, accuracy } = pos.coords;
-        const now = Date.now();
+  async function sendLocation() {
+    if (Date.now() - startedAt >= LIMIT_24H) { stopTracking(); return; }
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      const now = Date.now();
+      const acc = Math.round(accuracy);
 
-        // Auto-terminate 24 ชม.
-        if (now - startedAt >= LIMIT_24H) { stopTracking(); return; }
+      // 1) อัปเดต session realtime (Monitor ใช้)
+      await set(ref(db, `sessions/${parkCode}/${userId}`), {
+        lat, lng, accuracy: acc, startedAt, updatedAt: now
+      });
 
-        await set(ref(db, "sessions/" + parkCode + "/" + userId), {
-          lat: latitude, lng: longitude,
-          accuracy: Math.round(accuracy),
-          startedAt, updatedAt: now
-        });
+      // 2) เก็บ log รายวัน (Heatmap ใช้)
+      await push(ref(db, `daily/${todayStr()}/${parkCode}`), {
+        lat, lng, t: now
+      });
 
-        const time = new Date(now).toLocaleTimeString("th-TH");
-        document.getElementById("status").textContent =
-          `✅ ส่งตำแหน่งแล้ว ${time} (±${Math.round(accuracy)}ม.)`;
-      },
-      (err) => {
-        document.getElementById("status").textContent = "❌ อ่าน GPS ไม่ได้: " + err.message;
-      },
-      { enableHighAccuracy: true, timeout: 15000 }
-    );
+      const time = new Date(now).toLocaleTimeString("th-TH");
+      document.getElementById("status").textContent = `✅ ส่งตำแหน่งแล้ว ${time} (±${acc}ม.)`;
+    }, (err) => {
+      document.getElementById("status").textContent = "❌ อ่าน GPS ไม่ได้: " + err.message;
+    }, { enableHighAccuracy: true, timeout: 15000 });
   }
 
   window.stopTracking = async () => {
     clearInterval(intervalId);
     clearInterval(timerInterval);
-    if (parkCode && userId) {
-      await remove(ref(db, "sessions/" + parkCode + "/" + userId));
-    }
+    if (parkCode) await remove(ref(db, `sessions/${parkCode}/${userId}`));
     document.getElementById("trackingScreen").style.display = "none";
     document.getElementById("doneScreen").style.display     = "flex";
   };
