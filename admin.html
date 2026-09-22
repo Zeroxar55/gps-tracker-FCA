@@ -26,26 +26,22 @@
       margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
     }
     #topbar h1 { font-size: 1.2rem; }
-    #userInfo { font-size: 0.85rem; color: #94a3b8; }
     #logoutBtn {
       padding: 8px 16px; background: #334155; color: #f1f5f9;
       border: none; border-radius: 8px; cursor: pointer; font-size: 0.85rem;
     }
-    .card {
-      background: #1e293b; border-radius: 12px;
-      padding: 20px; margin-bottom: 20px;
-    }
+    .card { background: #1e293b; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
     .card h2 { font-size: 1rem; margin-bottom: 16px; color: #38bdf8; }
-    .input-row { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .input-row { display: flex; gap: 10px; flex-wrap: wrap; }
     input[type=text] {
       flex: 1; padding: 10px 14px; background: #0f172a;
       border: 1px solid #334155; border-radius: 8px;
-      color: #f1f5f9; font-size: 0.95rem; min-width: 200px;
+      color: #f1f5f9; font-size: 0.95rem; min-width: 180px;
     }
     input[type=text]:focus { outline: none; border-color: #38bdf8; }
     .btn-primary {
       padding: 10px 20px; background: #0ea5e9; color: white;
-      border: none; border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-weight: bold;
+      border: none; border-radius: 8px; cursor: pointer; font-weight: bold;
     }
     .btn-danger {
       padding: 6px 14px; background: #ef4444; color: white;
@@ -53,25 +49,27 @@
     }
     .btn-monitor {
       padding: 6px 14px; background: #0ea5e9; color: white;
-      border: none; border-radius: 8px; cursor: pointer; font-size: 0.85rem;
+      border: none; border-radius: 8px; font-size: 0.85rem;
       text-decoration: none; display: inline-block;
     }
     table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 10px; font-size: 0.8rem; color: #64748b; border-bottom: 1px solid #334155; }
-    td { padding: 12px 10px; border-bottom: 1px solid #1e293b; font-size: 0.9rem; vertical-align: middle; }
-    tr:last-child td { border-bottom: none; }
-    .badge {
-      display: inline-block; padding: 2px 10px; border-radius: 99px;
-      font-size: 0.75rem; font-weight: bold;
+    th {
+      text-align: left; padding: 10px;
+      font-size: 0.8rem; color: #64748b;
+      border-bottom: 1px solid #334155;
     }
-    .badge-active { background: #064e3b; color: #34d399; }
-    .badge-idle { background: #1e293b; color: #64748b; }
+    td { padding: 12px 10px; border-bottom: 1px solid #334155; font-size: 0.9rem; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    .code-badge {
+      font-family: monospace; font-size: 1.1rem; font-weight: bold;
+      letter-spacing: 4px; color: #38bdf8; background: #0f172a;
+      padding: 4px 10px; border-radius: 6px;
+    }
     #emptyMsg { color: #64748b; text-align: center; padding: 24px; }
   </style>
 </head>
 <body>
 
-<!-- หน้า Login -->
 <div id="loginScreen">
   <h1>🛡️ GPS Tracker Admin</h1>
   <p>เฉพาะผู้ดูแลระบบเท่านั้น</p>
@@ -82,35 +80,32 @@
   <div id="loginError" style="color:#f87171;font-size:0.85rem"></div>
 </div>
 
-<!-- หน้า Admin -->
 <div id="adminScreen">
   <div id="topbar">
     <h1>🗺️ GPS Tracker — Admin</h1>
     <div style="display:flex;align-items:center;gap:12px">
-      <span id="userInfo"></span>
+      <span id="userInfo" style="font-size:0.85rem;color:#94a3b8"></span>
       <button id="logoutBtn" onclick="logout()">ออกจากระบบ</button>
     </div>
   </div>
 
-  <!-- เพิ่มอุทยาน -->
   <div class="card">
     <h2>➕ เพิ่มอุทยาน</h2>
     <div class="input-row">
       <input type="text" id="parkName" placeholder="ชื่ออุทยาน เช่น ดอยอินทนนท์">
-      <input type="text" id="parkRegion" placeholder="ภูมิภาค เช่น เชียงใหม่">
-      <button class="btn-primary" onclick="addPark()">เพิ่ม</button>
+      <input type="text" id="parkRegion" placeholder="จังหวัด เช่น เชียงใหม่">
+      <button class="btn-primary" onclick="addPark()">➕ เพิ่ม</button>
     </div>
   </div>
 
-  <!-- รายการอุทยาน -->
   <div class="card">
     <h2>📋 รายการอุทยานทั้งหมด</h2>
     <table>
       <thead>
         <tr>
           <th>ชื่ออุทยาน</th>
-          <th>ภูมิภาค</th>
-          <th>สถานะ</th>
+          <th>จังหวัด</th>
+          <th>รหัส</th>
           <th>Monitor</th>
           <th>ลบ</th>
         </tr>
@@ -139,14 +134,13 @@
     appId: "1:652915365750:web:c3f0610fc7f63dda630c57"
   };
 
-  const ADMIN_EMAIL = "toktak1992@gmail.com"; // ← เปลี่ยนเป็น Gmail ของต๊อกกี้
+  const ADMIN_EMAIL = "toktak1992@gmail.com"; // ← Gmail ของต๊อกกี้
 
   const app  = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db   = getDatabase(app);
   const provider = new GoogleAuthProvider();
 
-  // เช็ค login state
   onAuthStateChanged(auth, (user) => {
     if (user && user.email === ADMIN_EMAIL) {
       document.getElementById("loginScreen").style.display = "none";
@@ -156,10 +150,7 @@
     } else {
       document.getElementById("loginScreen").style.display = "flex";
       document.getElementById("adminScreen").style.display = "none";
-      if (user) {
-        signOut(auth);
-        document.getElementById("loginError").textContent = "❌ Gmail นี้ไม่มีสิทธิ์เข้าระบบ";
-      }
+      if (user) { signOut(auth); document.getElementById("loginError").textContent = "❌ ไม่มีสิทธิ์เข้าระบบ"; }
     }
   });
 
@@ -170,45 +161,47 @@
 
   window.logout = () => signOut(auth);
 
-  // โหลดรายการอุทยาน
+  function genCode() {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  }
+
   function loadParks() {
     onValue(ref(db, "parks"), (snapshot) => {
       const tbody = document.getElementById("parkList");
       const data = snapshot.val();
       if (!data) {
-        tbody.innerHTML = '<tr><td colspan="5" id="emptyMsg" style="color:#64748b;text-align:center;padding:24px">ยังไม่มีอุทยาน</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="color:#64748b;text-align:center;padding:24px">ยังไม่มีอุทยาน</td></tr>';
         return;
       }
       tbody.innerHTML = "";
       Object.entries(data).forEach(([id, park]) => {
-        const monitorUrl = `https://zeroxar55.github.io/gps-tracker-FCA/monitor.html?park=${id}`;
-        const isActive = park.activeSession ? true : false;
+        const monitorUrl = `https://zeroxar55.github.io/gps-tracker-FCA/monitor.html?code=${park.code}`;
         tbody.innerHTML += `
           <tr>
             <td>${park.name}</td>
             <td>${park.region || "—"}</td>
-            <td><span class="badge ${isActive ? 'badge-active' : 'badge-idle'}">${isActive ? '🟢 Active' : '⚪ ว่าง'}</span></td>
-            <td><a class="btn-monitor" href="${monitorUrl}" target="_blank">เปิด Monitor</a></td>
-            <td><button class="btn-danger" onclick="deletePark('${id}')">ลบ</button></td>
+            <td><span class="code-badge">${park.code}</span></td>
+            <td><a class="btn-monitor" href="${monitorUrl}" target="_blank">🖥️ เปิด</a></td>
+            <td><button class="btn-danger" onclick="deletePark('${id}', '${park.code}')">ลบ</button></td>
           </tr>`;
       });
     });
   }
 
-  // เพิ่มอุทยาน
   window.addPark = async () => {
     const name   = document.getElementById("parkName").value.trim();
     const region = document.getElementById("parkRegion").value.trim();
     if (!name) { alert("กรุณากรอกชื่ออุทยาน"); return; }
-    await push(ref(db, "parks"), { name, region, createdAt: Date.now() });
+    const code = genCode();
+    await push(ref(db, "parks"), { name, region, code, createdAt: Date.now() });
     document.getElementById("parkName").value = "";
     document.getElementById("parkRegion").value = "";
   };
 
-  // ลบอุทยาน
-  window.deletePark = async (id) => {
-    if (!confirm("ลบอุทยานนี้?")) return;
+  window.deletePark = async (id, code) => {
+    if (!confirm("ลบอุทยานนี้? ข้อมูล session จะหายด้วย")) return;
     await remove(ref(db, "parks/" + id));
+    await remove(ref(db, "sessions/" + code));
   };
 </script>
 

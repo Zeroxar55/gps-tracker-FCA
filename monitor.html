@@ -14,61 +14,41 @@
       border-bottom: 1px solid #334155; flex-wrap: wrap;
     }
     #topbar h1 { font-size: 1rem; white-space: nowrap; }
-    select {
-      padding: 8px 12px; background: #0f172a; color: #f1f5f9;
-      border: 1px solid #334155; border-radius: 8px; font-size: 0.9rem;
-    }
-    #sessionBox {
-      display: flex; flex-direction: column; align-items: center;
+    #codeBox {
       background: #0f172a; border: 2px solid #38bdf8;
-      border-radius: 8px; padding: 4px 12px; min-width: 140px;
+      border-radius: 8px; padding: 4px 14px; text-align: center;
     }
-    #sessionBox .label { font-size: 0.65rem; color: #64748b; }
-    #sessionCode { font-size: 1.6rem; font-weight: bold; letter-spacing: 6px; color: #38bdf8; }
+    #codeBox .label { font-size: 0.65rem; color: #64748b; }
+    #codeBox .code { font-size: 1.4rem; font-weight: bold; letter-spacing: 6px; color: #38bdf8; }
+    #parkName { font-size: 0.9rem; color: #94a3b8; }
     #status { font-size: 0.8rem; color: #94a3b8; flex: 1; }
+    #countBox { font-size: 0.85rem; color: #f1f5f9; white-space: nowrap; }
     #map { flex: 1; }
-    #infobar {
-      padding: 8px 16px; background: #1e293b;
-      border-top: 1px solid #334155;
-      font-size: 0.8rem; color: #94a3b8;
-      display: flex; gap: 24px; flex-wrap: wrap;
+    #noCodeScreen {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 12px;
     }
-    #infobar span { color: #f1f5f9; font-weight: bold; }
-    #selectScreen {
-      display: flex; flex-direction: column; align-items: center;
-      justify-content: center; flex: 1; gap: 16px;
-    }
-    #selectScreen h2 { color: #94a3b8; }
-    .popup-del-btn {
-      margin-top: 6px; padding: 6px 12px; background: #ef4444; color: white;
-      border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem; width: 100%;
-    }
-    .popup-time { font-size: 0.75rem; color: #64748b; margin-top: 4px; }
+    #noCodeScreen p { color: #64748b; }
   </style>
 </head>
 <body>
 
 <div id="topbar">
   <h1>📍 GPS Monitor</h1>
-  <select id="parkSelect" onchange="selectPark(this.value)">
-    <option value="">— เลือกอุทยาน —</option>
-  </select>
-  <div id="sessionBox">
-    <div class="label">SESSION CODE</div>
-    <div id="sessionCode">------</div>
+  <div id="codeBox">
+    <div class="label">PARK CODE</div>
+    <div class="code" id="codeDisplay">------</div>
   </div>
-  <div id="status">⏳ เลือกอุทยานก่อน</div>
+  <div id="parkName">—</div>
+  <div id="status">⏳ รอการเชื่อมต่อ...</div>
+  <div id="countBox">👥 0 คน</div>
 </div>
 
-<div id="selectScreen">
-  <h2>🌿 กรุณาเลือกอุทยานด้านบน</h2>
+<div id="noCodeScreen">
+  <h2>⚠️ ไม่พบรหัสอุทยาน</h2>
+  <p>กรุณาเปิดหน้านี้จากหน้า Admin</p>
 </div>
-<div id="map" style="display:none; flex:1;"></div>
-
-<div id="infobar">
-  <div>ผู้ใช้ที่กำลังแชร์: <span id="infoCount">0</span></div>
-  <div>อัปเดตล่าสุด: <span id="infoTime">—</span></div>
-</div>
+<div id="map" style="display:none;"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module">
@@ -89,140 +69,118 @@
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
 
-  const EXPIRE_MS = 24 * 60 * 60 * 1000; // 24 ชม.
+  // ดึง code จาก URL ?code=XXXXXX
+  const urlParams = new URLSearchParams(window.location.search);
+  const parkCode  = urlParams.get("code");
 
-  let map = null;
-  let sessionCode = null;
-  let unsubscribe = null;
-  let markers = {}; // deviceId -> { marker, circle }
-  let parksById = {};
-
-  // โหลดรายการอุทยาน
-  onValue(ref(db, "parks"), (snapshot) => {
-    const select = document.getElementById("parkSelect");
-    const data = snapshot.val();
-    select.innerHTML = '<option value="">— เลือกอุทยาน —</option>';
-    parksById = data || {};
-    if (!data) return;
-    Object.entries(data).forEach(([id, park]) => {
-      select.innerHTML += `<option value="${id}">${park.name}${park.region ? ' ('+park.region+')' : ''}</option>`;
-    });
-
-    // ถ้ามี ?park=ID ใน URL ให้เลือกอัตโนมัติ (มาจากลิงก์ Monitor ในหน้า Admin)
-    const urlParkId = new URLSearchParams(location.search).get("park");
-    if (urlParkId && parksById[urlParkId] && select.value !== urlParkId) {
-      select.value = urlParkId;
-      selectPark(urlParkId);
-    }
-  });
-
-  // เลือกอุทยาน
-  window.selectPark = async (parkId) => {
-    if (!parkId) return;
-    const park = parksById[parkId];
-
-    if (!park || !park.code) {
-      document.getElementById("status").textContent = "❌ อุทยานนี้ยังไม่มีรหัส Session (สร้างจากหน้า Admin)";
-      return;
-    }
-
-    sessionCode = park.code;
-    document.getElementById("sessionCode").textContent = sessionCode;
-
-    // เปิดแผนที่
-    document.getElementById("selectScreen").style.display = "none";
+  if (!parkCode) {
+    // ไม่มี code ใน URL
+    document.getElementById("noCodeScreen").style.display = "flex";
+    document.getElementById("map").style.display = "none";
+  } else {
+    document.getElementById("noCodeScreen").style.display = "none";
     document.getElementById("map").style.display = "block";
+    document.getElementById("codeDisplay").textContent = parkCode;
 
-    if (!map) {
-      map = L.map("map").setView([18.7883, 98.9853], 13);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "© OpenStreetMap"
-      }).addTo(map);
-    }
-    setTimeout(() => map.invalidateSize(), 100);
-
-    // เคลียร์ marker เก่าทั้งหมด
-    if (unsubscribe) unsubscribe();
-    Object.values(markers).forEach(({ marker, circle }) => {
-      map.removeLayer(marker);
-      map.removeLayer(circle);
+    // หาชื่ออุทยานจาก code
+    onValue(ref(db, "parks"), (snap) => {
+      const data = snap.val();
+      if (!data) return;
+      const park = Object.values(data).find(p => p.code === parkCode);
+      if (park) document.getElementById("parkName").textContent = `🌿 ${park.name} ${park.region ? '— '+park.region : ''}`;
     });
-    markers = {};
 
-    document.getElementById("status").textContent = "⏳ รอนักท่องเที่ยวแชร์ตำแหน่ง...";
+    // Init map
+    const map = L.map("map").setView([18.7883, 98.9853], 13);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap"
+    }).addTo(map);
 
-    // ฟังตำแหน่งผู้ใช้ทุกคนภายใต้รหัสนี้ (หลายคนพร้อมกันได้)
-    unsubscribe = onValue(ref(db, "sessions/" + sessionCode), (snap) => {
-      const data = snap.val() || {};
-      const now = Date.now();
-      let activeCount = 0;
-      let latestUpdate = 0;
-      const seenIds = new Set();
+    const markers = {}; // userId → marker
+    const circles = {}; // userId → circle
 
-      Object.entries(data).forEach(([deviceId, loc]) => {
-        if (!loc || !loc.updatedAt) return;
+    // ฟัง sessions realtime
+    onValue(ref(db, "sessions/" + parkCode), (snap) => {
+      const data = snap.val();
+      const now  = Date.now();
+      const limit24h = 24 * 60 * 60 * 1000;
 
-        // หมดอายุ 24 ชม. -> ลบทิ้งจาก Firebase และไม่แสดง
-        if (now - loc.updatedAt > EXPIRE_MS) {
-          remove(ref(db, "sessions/" + sessionCode + "/" + deviceId));
+      // ลบ marker ที่ไม่มีแล้ว
+      const activeIds = data ? Object.keys(data) : [];
+      Object.keys(markers).forEach(uid => {
+        if (!activeIds.includes(uid)) {
+          map.removeLayer(markers[uid]);
+          map.removeLayer(circles[uid]);
+          delete markers[uid];
+          delete circles[uid];
+        }
+      });
+
+      if (!data) {
+        document.getElementById("status").textContent = "⏳ ยังไม่มีนักท่องเที่ยว";
+        document.getElementById("countBox").textContent = "👥 0 คน";
+        return;
+      }
+
+      let count = 0;
+      let firstUser = true;
+
+      Object.entries(data).forEach(([uid, d]) => {
+        // Auto-terminate 24 ชม.
+        if (now - d.startedAt > limit24h) {
+          remove(ref(db, "sessions/" + parkCode + "/" + uid));
           return;
         }
 
-        seenIds.add(deviceId);
-        activeCount++;
-        if (loc.updatedAt > latestUpdate) latestUpdate = loc.updatedAt;
+        count++;
+        const { lat, lng, accuracy, updatedAt } = d;
+        const timeStr = new Date(updatedAt).toLocaleTimeString("th-TH");
 
-        const timeStr = new Date(loc.updatedAt).toLocaleTimeString("th-TH");
-        const popupHtml = `
-          <div>
-            <b>📍 ผู้ใช้: ${deviceId}</b><br>
-            ความแม่นยำ: ±${loc.accuracy}ม.
-            <div class="popup-time">อัปเดตล่าสุด ${timeStr}</div>
-            <button class="popup-del-btn" onclick="window.removeUser('${deviceId}')">🗑️ ลบตำแหน่งนี้</button>
-          </div>`;
-
-        if (!markers[deviceId]) {
-          const marker = L.marker([loc.lat, loc.lng]).addTo(map).bindPopup(popupHtml);
-          const circle = L.circle([loc.lat, loc.lng], { radius: loc.accuracy, color: "#38bdf8", fillOpacity: 0.1 }).addTo(map);
-          markers[deviceId] = { marker, circle };
+        if (!markers[uid]) {
+          // สร้าง marker ใหม่
+          const m = L.marker([lat, lng]).addTo(map);
+          m.bindPopup(`
+            <b>🧭 นักท่องเที่ยว</b><br>
+            อัปเดต: ${timeStr}<br>
+            ±${accuracy}ม.<br>
+            <button onclick="terminateUser('${uid}')"
+              style="margin-top:8px;padding:6px 12px;background:#ef4444;
+              color:white;border:none;border-radius:6px;cursor:pointer;width:100%">
+              ⛔ Terminate
+            </button>
+          `);
+          markers[uid] = m;
+          circles[uid] = L.circle([lat, lng], {
+            radius: accuracy, color: "#38bdf8", fillOpacity: 0.1
+          }).addTo(map);
         } else {
-          markers[deviceId].marker.setLatLng([loc.lat, loc.lng]).setPopupContent(popupHtml);
-          markers[deviceId].circle.setLatLng([loc.lat, loc.lng]).setRadius(loc.accuracy);
+          markers[uid].setLatLng([lat, lng]);
+          markers[uid].setPopupContent(`
+            <b>🧭 นักท่องเที่ยว</b><br>
+            อัปเดต: ${timeStr}<br>
+            ±${accuracy}ม.<br>
+            <button onclick="terminateUser('${uid}')"
+              style="margin-top:8px;padding:6px 12px;background:#ef4444;
+              color:white;border:none;border-radius:6px;cursor:pointer;width:100%">
+              ⛔ Terminate
+            </button>
+          `);
+          circles[uid].setLatLng([lat, lng]).setRadius(accuracy);
         }
+
+        if (firstUser) { map.setView([lat, lng], 15); firstUser = false; }
       });
 
-      // เอา marker ของคนที่หายไป (ลบ/หมดอายุ) ออกจากแผนที่
-      Object.keys(markers).forEach((deviceId) => {
-        if (!seenIds.has(deviceId)) {
-          map.removeLayer(markers[deviceId].marker);
-          map.removeLayer(markers[deviceId].circle);
-          delete markers[deviceId];
-        }
-      });
-
-      // ปรับมุมมองแผนที่ให้เห็นทุกคนพอดี ตอนมีข้อมูลครั้งแรก
-      const activeMarkers = Object.values(markers).map(m => m.marker);
-      if (activeMarkers.length === 1) {
-        map.setView(activeMarkers[0].getLatLng(), 16);
-      } else if (activeMarkers.length > 1) {
-        const group = L.featureGroup(activeMarkers);
-        map.fitBounds(group.getBounds().pad(0.2));
-      }
-
-      document.getElementById("infoCount").textContent = activeCount;
-      document.getElementById("infoTime").textContent = latestUpdate ? new Date(latestUpdate).toLocaleTimeString("th-TH") : "—";
-      document.getElementById("status").textContent = activeCount > 0
-        ? `🟢 กำลัง Tracking ${activeCount} คน — ${sessionCode}`
-        : `⏳ รอนักท่องเที่ยวแชร์ตำแหน่ง... — ${sessionCode}`;
+      document.getElementById("countBox").textContent = `👥 ${count} คน`;
+      document.getElementById("status").textContent = count > 0 ? "🟢 กำลัง Tracking" : "⏳ ยังไม่มีนักท่องเที่ยว";
     });
-  };
 
-  // ลบตำแหน่งของผู้ใช้คนเดียว (คลิกจาก popup บน Marker)
-  window.removeUser = async (deviceId) => {
-    if (!sessionCode) return;
-    if (!confirm("ลบตำแหน่งของผู้ใช้คนนี้?")) return;
-    await remove(ref(db, "sessions/" + sessionCode + "/" + deviceId));
-  };
+    // Terminate รายคน
+    window.terminateUser = async (uid) => {
+      if (!confirm("ลบนักท่องเที่ยวคนนี้?")) return;
+      await remove(ref(db, "sessions/" + parkCode + "/" + uid));
+    };
+  }
 </script>
 
 </body>

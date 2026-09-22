@@ -3,134 +3,206 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GPS Tracker — เริ่มแชร์ตำแหน่ง</title>
+  <title>GPS Tracker — แชร์ตำแหน่ง</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: sans-serif;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      min-height: 100vh;
-      background: #0f172a; color: #f1f5f9;
-      padding: 24px;
+      font-family: sans-serif; background: #0f172a; color: #f1f5f9;
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 24px;
     }
-    h1 { font-size: 1.4rem; margin-bottom: 8px; text-align: center; }
-    p  { font-size: 0.9rem; color: #94a3b8; margin-bottom: 24px; text-align: center; }
+    .card {
+      background: #1e293b; border-radius: 16px;
+      padding: 28px 24px; width: 100%; max-width: 360px;
+      display: flex; flex-direction: column; align-items: center; gap: 16px;
+    }
+    h1 { font-size: 1.3rem; text-align: center; }
+    p { font-size: 0.85rem; color: #94a3b8; text-align: center; }
     input {
-      width: 100%; max-width: 320px;
-      padding: 14px 16px; font-size: 1.5rem;
-      letter-spacing: 8px; text-align: center;
-      border: 2px solid #334155; border-radius: 12px;
-      background: #1e293b; color: #f1f5f9;
-      margin-bottom: 16px; outline: none;
+      width: 100%; padding: 14px 16px;
+      font-size: 1.8rem; letter-spacing: 10px; text-align: center;
+      background: #0f172a; border: 2px solid #334155;
+      border-radius: 12px; color: #f1f5f9; outline: none;
+      text-transform: uppercase;
     }
     input:focus { border-color: #38bdf8; }
-    button {
-      width: 100%; max-width: 320px;
-      padding: 14px; font-size: 1rem; font-weight: bold;
-      border: none; border-radius: 12px;
-      background: #0ea5e9; color: white; cursor: pointer;
+    .btn {
+      width: 100%; padding: 14px; font-size: 1rem; font-weight: bold;
+      border: none; border-radius: 12px; cursor: pointer;
     }
-    button:disabled { background: #334155; cursor: not-allowed; }
-    #status {
-      margin-top: 20px; font-size: 0.85rem;
-      color: #38bdf8; text-align: center; min-height: 24px;
-      white-space: pre-line;
+    .btn-start { background: #0ea5e9; color: white; }
+    .btn-start:disabled { background: #334155; cursor: not-allowed; }
+    .btn-stop { background: #ef4444; color: white; display: none; }
+    #status { font-size: 0.85rem; color: #38bdf8; text-align: center; min-height: 20px; }
+    #error { font-size: 0.85rem; color: #f87171; text-align: center; min-height: 20px; }
+    #parkInfo {
+      font-size: 0.9rem; color: #34d399; text-align: center;
+      font-weight: bold; display: none;
     }
-    #error { color: #f87171; margin-top: 8px; text-align: center; font-size: 0.85rem; }
+    #doneScreen {
+      display: none; flex-direction: column;
+      align-items: center; gap: 12px; text-align: center;
+    }
+    #doneScreen h2 { font-size: 1.2rem; color: #34d399; }
+    #doneScreen p { color: #94a3b8; font-size: 0.85rem; }
   </style>
 </head>
 <body>
+<div class="card">
 
-  <h1>📍 แชร์ตำแหน่งของคุณ</h1>
-  <p>กรอกรหัส Session ที่ได้รับจากเจ้าหน้าที่<br>แล้วกดเริ่มแชร์ตำแหน่ง</p>
+  <!-- หน้าแรก: กรอกรหัส -->
+  <div id="inputScreen" style="width:100%;display:flex;flex-direction:column;align-items:center;gap:16px">
+    <h1>📍 แชร์ตำแหน่ง</h1>
+    <p>กรอกรหัสอุทยานที่ได้รับจากเจ้าหน้าที่</p>
+    <input id="codeInput" type="text" maxlength="6" placeholder="XXXXXX"
+      oninput="this.value=this.value.toUpperCase()">
+    <div id="parkInfo"></div>
+    <div id="error"></div>
+    <button class="btn btn-start" id="startBtn" onclick="startTracking()">เริ่มแชร์ตำแหน่ง</button>
+  </div>
 
-  <input id="codeInput" type="text" maxlength="6"
-         placeholder="XXXXXX" oninput="this.value=this.value.toUpperCase()">
-  <button id="startBtn" onclick="startTracking()">เริ่มแชร์ตำแหน่ง</button>
+  <!-- หน้า tracking -->
+  <div id="trackingScreen" style="width:100%;display:none;flex-direction:column;align-items:center;gap:16px">
+    <h1>📡 กำลังแชร์ตำแหน่ง</h1>
+    <div id="parkInfo2" style="font-size:0.9rem;color:#34d399;font-weight:bold;text-align:center"></div>
+    <div id="status"></div>
+    <div id="timer" style="font-size:0.8rem;color:#64748b;text-align:center"></div>
+    <button class="btn btn-stop" id="stopBtn" onclick="stopTracking()" style="display:block">
+      ⛔ หยุดแชร์ตำแหน่ง
+    </button>
+  </div>
 
-  <div id="status"></div>
-  <div id="error"></div>
+  <!-- หน้า done -->
+  <div id="doneScreen">
+    <h2>✅ หยุดแชร์แล้ว</h2>
+    <p>ขอบคุณที่ใช้บริการ<br>ข้อมูลตำแหน่งถูกลบแล้ว</p>
+  </div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+</div>
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyAb6EUMSsuaC9Ou1FrWfIgOiDY-_1fuEW4",
-      authDomain: "tracking-system-test-fca.firebaseapp.com",
-      databaseURL: "https://tracking-system-test-fca-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "tracking-system-test-fca",
-      storageBucket: "tracking-system-test-fca.firebasestorage.app",
-      messagingSenderId: "652915365750",
-      appId: "1:652915365750:web:c3f0610fc7f63dda630c57"
-    };
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, set, remove, onValue }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-    const app = initializeApp(firebaseConfig);
-    const db  = getDatabase(app);
+  const firebaseConfig = {
+    apiKey: "AIzaSyAb6EUMSsuaC9Ou1FrWfIgOiDY-_1fuEW4",
+    authDomain: "tracking-system-test-fca.firebaseapp.com",
+    databaseURL: "https://tracking-system-test-fca-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "tracking-system-test-fca",
+    storageBucket: "tracking-system-test-fca.firebasestorage.app",
+    messagingSenderId: "652915365750",
+    appId: "1:652915365750:web:c3f0610fc7f63dda630c57"
+  };
 
-    let intervalId = null;
-    let sessionCode = null;
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
 
-    // แต่ละเครื่อง/เบราว์เซอร์ จะมี deviceId ของตัวเอง เก็บไว้ใน localStorage
-    // เพื่อให้หลายคนแชร์ตำแหน่งพร้อมกันได้ภายใต้รหัสอุทยานเดียวกัน
-    // โดยไม่ทับตำแหน่งของกันและกัน
-    function getDeviceId() {
-      let id = localStorage.getItem("gps_device_id");
-      if (!id) {
-        id = "u" + Math.random().toString(36).substring(2, 10);
-        localStorage.setItem("gps_device_id", id);
+  // gen userId ของนักท่องเที่ยวคนนี้
+  const userId = "user_" + Math.random().toString(36).substring(2, 10);
+
+  let parkCode    = null;
+  let intervalId  = null;
+  let startedAt   = null;
+  let timerInterval = null;
+  const LIMIT_24H = 24 * 60 * 60 * 1000;
+
+  // เช็ครหัสอุทยานแบบ realtime ขณะพิมพ์
+  document.getElementById("codeInput").addEventListener("input", () => {
+    const code = document.getElementById("codeInput").value.trim().toUpperCase();
+    const parkInfo = document.getElementById("parkInfo");
+    const error    = document.getElementById("error");
+    if (code.length < 6) { parkInfo.style.display = "none"; error.textContent = ""; return; }
+
+    onValue(ref(db, "parks"), (snap) => {
+      const data = snap.val();
+      if (!data) { error.textContent = "❌ ไม่พบรหัสนี้"; parkInfo.style.display = "none"; return; }
+      const park = Object.values(data).find(p => p.code === code);
+      if (park) {
+        parkInfo.textContent = `🌿 ${park.name}${park.region ? ' — '+park.region : ''}`;
+        parkInfo.style.display = "block";
+        error.textContent = "";
+      } else {
+        parkInfo.style.display = "none";
+        error.textContent = "❌ ไม่พบรหัสนี้";
       }
-      return id;
+    }, { onlyOnce: true });
+  });
+
+  window.startTracking = async () => {
+    const code = document.getElementById("codeInput").value.trim().toUpperCase();
+    if (code.length < 6) { document.getElementById("error").textContent = "⚠️ กรอกรหัสให้ครบ 6 ตัว"; return; }
+
+    // ตรวจสอบรหัสอีกครั้ง
+    const snap = await new Promise(res => onValue(ref(db, "parks"), res, { onlyOnce: true }));
+    const data = snap.val();
+    const park = data ? Object.values(data).find(p => p.code === code) : null;
+    if (!park) { document.getElementById("error").textContent = "❌ ไม่พบรหัสนี้"; return; }
+
+    if (!navigator.geolocation) {
+      document.getElementById("error").textContent = "❌ เบราว์เซอร์ไม่รองรับ GPS";
+      return;
     }
-    const deviceId = getDeviceId();
 
-    window.startTracking = function() {
-      const code = document.getElementById("codeInput").value.trim();
-      if (code.length < 4) {
-        document.getElementById("error").textContent = "⚠️ กรุณากรอกรหัสให้ครบ";
-        return;
-      }
-      sessionCode = code;
-      document.getElementById("error").textContent = "";
-      document.getElementById("startBtn").disabled = true;
-      document.getElementById("startBtn").textContent = "กำลังแชร์...";
-      document.getElementById("status").textContent = "⏳ กำลังขอ GPS...";
+    parkCode  = code;
+    startedAt = Date.now();
 
-      if (!navigator.geolocation) {
-        document.getElementById("error").textContent = "❌ เบราว์เซอร์นี้ไม่รองรับ GPS";
-        return;
-      }
+    // สลับหน้า
+    document.getElementById("inputScreen").style.display   = "none";
+    document.getElementById("trackingScreen").style.display = "flex";
+    document.getElementById("parkInfo2").textContent = `🌿 ${park.name}${park.region ? ' — '+park.region : ''}`;
+    document.getElementById("status").textContent = "⏳ กำลังขอ GPS...";
 
-      sendLocation(); // ส่งทันทีครั้งแรก
-      intervalId = setInterval(sendLocation, 10 * 60 * 1000); // ทุก 10 นาที
-    };
+    sendLocation();
+    intervalId = setInterval(sendLocation, 10 * 60 * 1000); // ทุก 10 นาที
 
-    function sendLocation() {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const { latitude, longitude, accuracy } = pos.coords;
-          const timestamp = Date.now();
-          set(ref(db, "sessions/" + sessionCode + "/" + deviceId), {
-            lat: latitude, lng: longitude,
-            accuracy: Math.round(accuracy),
-            updatedAt: timestamp
-          });
-          const time = new Date(timestamp).toLocaleTimeString("th-TH");
-          document.getElementById("status").textContent =
-            `✅ ส่งตำแหน่งแล้ว ${time}\n📡 ความแม่นยำ ±${Math.round(accuracy)}ม.`;
-        },
-        (err) => {
-          document.getElementById("error").textContent = "❌ ไม่สามารถอ่าน GPS: " + err.message;
-        },
-        { enableHighAccuracy: true, timeout: 15000 }
-      );
+    // นับเวลา
+    timerInterval = setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const remaining = LIMIT_24H - elapsed;
+      if (remaining <= 0) { stopTracking(); return; }
+      const h = Math.floor(remaining / 3600000);
+      const m = Math.floor((remaining % 3600000) / 60000);
+      document.getElementById("timer").textContent = `⏱ หยุดอัตโนมัติใน ${h} ชม. ${m} นาที`;
+    }, 60000);
+  };
+
+  function sendLocation() {
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        const now = Date.now();
+
+        // Auto-terminate 24 ชม.
+        if (now - startedAt >= LIMIT_24H) { stopTracking(); return; }
+
+        await set(ref(db, "sessions/" + parkCode + "/" + userId), {
+          lat: latitude, lng: longitude,
+          accuracy: Math.round(accuracy),
+          startedAt, updatedAt: now
+        });
+
+        const time = new Date(now).toLocaleTimeString("th-TH");
+        document.getElementById("status").textContent =
+          `✅ ส่งตำแหน่งแล้ว ${time} (±${Math.round(accuracy)}ม.)`;
+      },
+      (err) => {
+        document.getElementById("status").textContent = "❌ อ่าน GPS ไม่ได้: " + err.message;
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  }
+
+  window.stopTracking = async () => {
+    clearInterval(intervalId);
+    clearInterval(timerInterval);
+    if (parkCode && userId) {
+      await remove(ref(db, "sessions/" + parkCode + "/" + userId));
     }
-
-    window.addEventListener("beforeunload", () => {
-      if (intervalId) clearInterval(intervalId);
-    });
-  </script>
+    document.getElementById("trackingScreen").style.display = "none";
+    document.getElementById("doneScreen").style.display     = "flex";
+  };
+</script>
 
 </body>
 </html>
