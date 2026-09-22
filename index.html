@@ -3,471 +3,134 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin — GPS Tracker</title>
+  <title>GPS Tracker — เริ่มแชร์ตำแหน่ง</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: sans-serif; background: #0f172a; color: #f1f5f9; min-height: 100vh; }
-    #loginScreen {
-      display: flex; flex-direction: column; align-items: center;
-      justify-content: center; min-height: 100vh; gap: 16px;
+    body {
+      font-family: sans-serif;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      min-height: 100vh;
+      background: #0f172a; color: #f1f5f9;
+      padding: 24px;
     }
-    #loginScreen h1 { font-size: 1.4rem; }
-    #loginScreen p { color: #94a3b8; font-size: 0.9rem; }
-    #googleBtn {
-      display: flex; align-items: center; gap: 10px;
-      padding: 12px 24px; background: white; color: #1e293b;
-      border: none; border-radius: 8px; font-size: 1rem;
-      font-weight: bold; cursor: pointer;
+    h1 { font-size: 1.4rem; margin-bottom: 8px; text-align: center; }
+    p  { font-size: 0.9rem; color: #94a3b8; margin-bottom: 24px; text-align: center; }
+    input {
+      width: 100%; max-width: 320px;
+      padding: 14px 16px; font-size: 1.5rem;
+      letter-spacing: 8px; text-align: center;
+      border: 2px solid #334155; border-radius: 12px;
+      background: #1e293b; color: #f1f5f9;
+      margin-bottom: 16px; outline: none;
     }
-    #googleBtn:hover { background: #f1f5f9; }
-    #adminScreen { display: none; padding: 24px; max-width: 900px; margin: 0 auto; }
-    #topbar {
-      display: flex; justify-content: space-between; align-items: center;
-      margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
+    input:focus { border-color: #38bdf8; }
+    button {
+      width: 100%; max-width: 320px;
+      padding: 14px; font-size: 1rem; font-weight: bold;
+      border: none; border-radius: 12px;
+      background: #0ea5e9; color: white; cursor: pointer;
     }
-    #topbar h1 { font-size: 1.2rem; }
-    #userInfo { font-size: 0.85rem; color: #94a3b8; }
-    #logoutBtn {
-      padding: 8px 16px; background: #334155; color: #f1f5f9;
-      border: none; border-radius: 8px; cursor: pointer; font-size: 0.85rem;
+    button:disabled { background: #334155; cursor: not-allowed; }
+    #status {
+      margin-top: 20px; font-size: 0.85rem;
+      color: #38bdf8; text-align: center; min-height: 24px;
+      white-space: pre-line;
     }
-    .card {
-      background: #1e293b; border-radius: 12px;
-      padding: 20px; margin-bottom: 20px;
-    }
-    .card h2 { font-size: 1rem; margin-bottom: 16px; color: #38bdf8; }
-    .input-row { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
-    input[type=text] {
-      flex: 1; padding: 10px 14px; background: #0f172a;
-      border: 1px solid #334155; border-radius: 8px;
-      color: #f1f5f9; font-size: 0.95rem; min-width: 200px;
-    }
-    input[type=text]:focus { outline: none; border-color: #38bdf8; }
-    .btn-primary {
-      padding: 10px 20px; background: #0ea5e9; color: white;
-      border: none; border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-weight: bold;
-    }
-    .btn-danger {
-      padding: 6px 14px; background: #ef4444; color: white;
-      border: none; border-radius: 8px; cursor: pointer; font-size: 0.85rem;
-    }
-    .btn-monitor {
-      padding: 6px 14px; background: #0ea5e9; color: white;
-      border: none; border-radius: 8px; cursor: pointer; font-size: 0.85rem;
-      text-decoration: none; display: inline-block;
-    }
-    table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 10px; font-size: 0.8rem; color: #64748b; border-bottom: 1px solid #334155; }
-    td { padding: 12px 10px; border-bottom: 1px solid #1e293b; font-size: 0.9rem; vertical-align: middle; }
-    tr:last-child td { border-bottom: none; }
-    .badge {
-      display: inline-block; padding: 2px 10px; border-radius: 99px;
-      font-size: 0.75rem; font-weight: bold;
-    }
-    .badge-active { background: #064e3b; color: #34d399; }
-    .badge-idle { background: #1e293b; color: #64748b; }
-    #emptyMsg { color: #64748b; text-align: center; padding: 24px; }
+    #error { color: #f87171; margin-top: 8px; text-align: center; font-size: 0.85rem; }
   </style>
 </head>
 <body>
 
-<!-- หน้า Login -->
-<div id="loginScreen">
-  <h1>🛡️ GPS Tracker Admin</h1>
-  <p>เฉพาะผู้ดูแลระบบเท่านั้น</p>
-  <button id="googleBtn" onclick="loginWithGoogle()">
-    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20">
-    เข้าสู่ระบบด้วย Google
-  </button>
-  <div id="loginError" style="color:#f87171;font-size:0.85rem"></div>
-</div>
+  <h1>📍 แชร์ตำแหน่งของคุณ</h1>
+  <p>กรอกรหัส Session ที่ได้รับจากเจ้าหน้าที่<br>แล้วกดเริ่มแชร์ตำแหน่ง</p>
 
-<!-- หน้า Admin -->
-<div id="adminScreen">
-  <div id="topbar">
-    <h1>🗺️ GPS Tracker — Admin</h1>
-    <div style="display:flex;align-items:center;gap:12px">
-      <span id="userInfo"></span>
-      <button id="logoutBtn" onclick="logout()">ออกจากระบบ</button>
-    </div>
-  </div>
+  <input id="codeInput" type="text" maxlength="6"
+         placeholder="XXXXXX" oninput="this.value=this.value.toUpperCase()">
+  <button id="startBtn" onclick="startTracking()">เริ่มแชร์ตำแหน่ง</button>
 
-  <!-- เพิ่มอุทยาน -->
-  <div class="card">
-    <h2>➕ เพิ่มอุทยาน</h2>
-    <div class="input-row">
-      <input type="text" id="parkName" placeholder="ชื่ออุทยาน เช่น ดอยอินทนนท์">
-      <input type="text" id="parkRegion" placeholder="ภูมิภาค เช่น เชียงใหม่">
-      <button class="btn-primary" onclick="addPark()">เพิ่ม</button>
-    </div>
-  </div>
+  <div id="status"></div>
+  <div id="error"></div>
 
-  <!-- รายการอุทยาน -->
-  <div class="card">
-    <h2>📋 รายการอุทยานทั้งหมด</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>ชื่ออุทยาน</th>
-          <th>ภูมิภาค</th>
-          <th>สถานะ</th>
-          <th>Monitor</th>
-          <th>ลบ</th>
-        </tr>
-      </thead>
-      <tbody id="parkList">
-        <tr><td colspan="5" id="emptyMsg">ยังไม่มีอุทยาน</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
-    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-  import { getDatabase, ref, push, onValue, remove, set }
-    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    const firebaseConfig = {
+      apiKey: "AIzaSyAb6EUMSsuaC9Ou1FrWfIgOiDY-_1fuEW4",
+      authDomain: "tracking-system-test-fca.firebaseapp.com",
+      databaseURL: "https://tracking-system-test-fca-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "tracking-system-test-fca",
+      storageBucket: "tracking-system-test-fca.firebasestorage.app",
+      messagingSenderId: "652915365750",
+      appId: "1:652915365750:web:c3f0610fc7f63dda630c57"
+    };
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyAb6EUMSsuaC9Ou1FrWfIgOiDY-_1fuEW4",
-    authDomain: "tracking-system-test-fca.firebaseapp.com",
-    databaseURL: "https://tracking-system-test-fca-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "tracking-system-test-fca",
-    storageBucket: "tracking-system-test-fca.firebasestorage.app",
-    messagingSenderId: "652915365750",
-    appId: "1:652915365750:web:c3f0610fc7f63dda630c57"
-  };
+    const app = initializeApp(firebaseConfig);
+    const db  = getDatabase(app);
 
-  const ADMIN_EMAIL = "toktak1992@gmail.com"; // ← เปลี่ยนเป็น Gmail ของต๊อกกี้
+    let intervalId = null;
+    let sessionCode = null;
 
-  const app  = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db   = getDatabase(app);
-  const provider = new GoogleAuthProvider();
-
-  // เช็ค login state
-  onAuthStateChanged(auth, (user) => {
-    if (user && user.email === ADMIN_EMAIL) {
-      document.getElementById("loginScreen").style.display = "none";
-      document.getElementById("adminScreen").style.display = "block";
-      document.getElementById("userInfo").textContent = user.email;
-      loadParks();
-    } else {
-      document.getElementById("loginScreen").style.display = "flex";
-      document.getElementById("adminScreen").style.display = "none";
-      if (user) {
-        signOut(auth);
-        document.getElementById("loginError").textContent = "❌ Gmail นี้ไม่มีสิทธิ์เข้าระบบ";
+    // แต่ละเครื่อง/เบราว์เซอร์ จะมี deviceId ของตัวเอง เก็บไว้ใน localStorage
+    // เพื่อให้หลายคนแชร์ตำแหน่งพร้อมกันได้ภายใต้รหัสอุทยานเดียวกัน
+    // โดยไม่ทับตำแหน่งของกันและกัน
+    function getDeviceId() {
+      let id = localStorage.getItem("gps_device_id");
+      if (!id) {
+        id = "u" + Math.random().toString(36).substring(2, 10);
+        localStorage.setItem("gps_device_id", id);
       }
-    }<!DOCTYPE html>
-<html lang="th">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin — GPS Tracker</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: sans-serif; background: #0f172a; color: #f1f5f9; min-height: 100vh; }
-    #loginScreen {
-      display: flex; flex-direction: column; align-items: center;
-      justify-content: center; min-height: 100vh; gap: 16px;
+      return id;
     }
-    #loginScreen h1 { font-size: 1.4rem; }
-    #loginScreen p { color: #94a3b8; font-size: 0.9rem; }
-    #googleBtn {
-      display: flex; align-items: center; gap: 10px;
-      padding: 12px 24px; background: white; color: #1e293b;
-      border: none; border-radius: 8px; font-size: 1rem;
-      font-weight: bold; cursor: pointer;
-    }
-    #googleBtn:hover { background: #f1f5f9; }
-    #adminScreen { display: none; padding: 24px; max-width: 1000px; margin: 0 auto; }
-    #topbar {
-      display: flex; justify-content: space-between; align-items: center;
-      margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
-    }
-    #topbar h1 { font-size: 1.2rem; }
-    #userInfo { font-size: 0.85rem; color: #94a3b8; }
-    #logoutBtn {
-      padding: 8px 16px; background: #334155; color: #f1f5f9;
-      border: none; border-radius: 8px; cursor: pointer; font-size: 0.85rem;
-    }
-    .card {
-      background: #1e293b; border-radius: 12px;
-      padding: 20px; margin-bottom: 20px;
-    }
-    .card h2 { font-size: 1rem; margin-bottom: 16px; color: #38bdf8; }
-    .input-row { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
-    input[type=text] {
-      flex: 1; padding: 10px 14px; background: #0f172a;
-      border: 1px solid #334155; border-radius: 8px;
-      color: #f1f5f9; font-size: 0.95rem; min-width: 200px;
-    }
-    input[type=text]:focus { outline: none; border-color: #38bdf8; }
-    .btn-primary {
-      padding: 10px 20px; background: #0ea5e9; color: white;
-      border: none; border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-weight: bold;
-    }
-    .btn-danger {
-      padding: 6px 14px; background: #ef4444; color: white;
-      border: none; border-radius: 8px; cursor: pointer; font-size: 0.85rem;
-    }
-    .btn-monitor {
-      padding: 6px 14px; background: #0ea5e9; color: white;
-      border: none; border-radius: 8px; cursor: pointer; font-size: 0.85rem;
-      text-decoration: none; display: inline-block;
-    }
-    table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 10px; font-size: 0.8rem; color: #64748b; border-bottom: 1px solid #334155; }
-    td { padding: 12px 10px; border-bottom: 1px solid #1e293b; font-size: 0.9rem; vertical-align: middle; }
-    tr:last-child td { border-bottom: none; }
-    .code-badge {
-      font-family: monospace; font-size: 0.95rem; font-weight: bold;
-      letter-spacing: 2px; color: #38bdf8; background: #0f172a;
-      padding: 4px 10px; border-radius: 6px; border: 1px solid #334155;
-    }
-    .badge {
-      display: inline-block; padding: 2px 10px; border-radius: 99px;
-      font-size: 0.75rem; font-weight: bold;
-    }
-    .badge-active { background: #064e3b; color: #34d399; }
-    .badge-idle { background: #1e293b; color: #64748b; }
-    #emptyMsg { color: #64748b; text-align: center; padding: 24px; }
-  </style>
-</head>
-<body>
+    const deviceId = getDeviceId();
 
-<!-- หน้า Login -->
-<div id="loginScreen">
-  <h1>🛡️ GPS Tracker Admin</h1>
-  <p>เฉพาะผู้ดูแลระบบเท่านั้น</p>
-  <button id="googleBtn" onclick="loginWithGoogle()">
-    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20">
-    เข้าสู่ระบบด้วย Google
-  </button>
-  <div id="loginError" style="color:#f87171;font-size:0.85rem"></div>
-</div>
-
-<!-- หน้า Admin -->
-<div id="adminScreen">
-  <div id="topbar">
-    <h1>🗺️ GPS Tracker — Admin</h1>
-    <div style="display:flex;align-items:center;gap:12px">
-      <span id="userInfo"></span>
-      <button id="logoutBtn" onclick="logout()">ออกจากระบบ</button>
-    </div>
-  </div>
-
-  <!-- เพิ่มอุทยาน -->
-  <div class="card">
-    <h2>➕ เพิ่มอุทยาน</h2>
-    <div class="input-row">
-      <input type="text" id="parkName" placeholder="ชื่ออุทยาน เช่น ดอยอินทนนท์">
-      <input type="text" id="parkRegion" placeholder="ภูมิภาค เช่น เชียงใหม่">
-      <button class="btn-primary" onclick="addPark()">เพิ่ม</button>
-    </div>
-  </div>
-
-  <!-- รายการอุทยาน -->
-  <div class="card">
-    <h2>📋 รายการอุทยานทั้งหมด</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>ชื่ออุทยาน</th>
-          <th>ภูมิภาค</th>
-          <th>รหัส Session</th>
-          <th>สถานะ</th>
-          <th>Monitor</th>
-          <th>ลบ</th>
-        </tr>
-      </thead>
-      <tbody id="parkList">
-        <tr><td colspan="6" id="emptyMsg">ยังไม่มีอุทยาน</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
-    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-  import { getDatabase, ref, push, onValue, remove, set, get }
-    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyAb6EUMSsuaC9Ou1FrWfIgOiDY-_1fuEW4",
-    authDomain: "tracking-system-test-fca.firebaseapp.com",
-    databaseURL: "https://tracking-system-test-fca-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "tracking-system-test-fca",
-    storageBucket: "tracking-system-test-fca.firebasestorage.app",
-    messagingSenderId: "652915365750",
-    appId: "1:652915365750:web:c3f0610fc7f63dda630c57"
-  };
-
-  const ADMIN_EMAIL = "toktak1992@gmail.com"; // ← เปลี่ยนเป็น Gmail ของต๊อกกี้
-  const EXPIRE_MS = 24 * 60 * 60 * 1000; // 24 ชม. ต้องตรงกับ monitor.html
-
-  const app  = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db   = getDatabase(app);
-  const provider = new GoogleAuthProvider();
-
-  // เช็ค login state
-  onAuthStateChanged(auth, (user) => {
-    if (user && user.email === ADMIN_EMAIL) {
-      document.getElementById("loginScreen").style.display = "none";
-      document.getElementById("adminScreen").style.display = "block";
-      document.getElementById("userInfo").textContent = user.email;
-      loadParks();
-    } else {
-      document.getElementById("loginScreen").style.display = "flex";
-      document.getElementById("adminScreen").style.display = "none";
-      if (user) {
-        signOut(auth);
-        document.getElementById("loginError").textContent = "❌ Gmail นี้ไม่มีสิทธิ์เข้าระบบ";
-      }
-    }
-  });
-
-  window.loginWithGoogle = async () => {
-    try { await signInWithPopup(auth, provider); }
-    catch(e) { document.getElementById("loginError").textContent = "❌ Login ไม่สำเร็จ"; }
-  };
-
-  window.logout = () => signOut(auth);
-
-  // สุ่มรหัส 6 ตัว และกันชนกับรหัสที่มีอยู่แล้ว
-  async function generateUniqueCode() {
-    const existingSnap = await get(ref(db, "parks"));
-    const existing = existingSnap.val() || {};
-    const usedCodes = new Set(Object.values(existing).map(p => p.code).filter(Boolean));
-    let code;
-    do {
-      code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    } while (usedCodes.has(code));
-    return code;
-  }
-
-  // โหลดรายการอุทยาน
-  function loadParks() {
-    onValue(ref(db, "parks"), (snapshot) => {
-      const tbody = document.getElementById("parkList");
-      const data = snapshot.val();
-      if (!data) {
-        tbody.innerHTML = '<tr><td colspan="6" id="emptyMsg" style="color:#64748b;text-align:center;padding:24px">ยังไม่มีอุทยาน</td></tr>';
+    window.startTracking = function() {
+      const code = document.getElementById("codeInput").value.trim();
+      if (code.length < 4) {
+        document.getElementById("error").textContent = "⚠️ กรุณากรอกรหัสให้ครบ";
         return;
       }
-      tbody.innerHTML = "";
-      Object.entries(data).forEach(([id, park]) => {
-        const monitorUrl = `https://zeroxar55.github.io/gps-tracker-FCA/monitor.html?park=${id}`;
-        const statusId = "status-" + id;
-        tbody.innerHTML += `
-          <tr>
-            <td>${park.name}</td>
-            <td>${park.region || "—"}</td>
-            <td>${park.code ? `<span class="code-badge">${park.code}</span>` : "<span style='color:#64748b'>— ไม่มีรหัส —</span>"}</td>
-            <td id="${statusId}"><span class="badge badge-idle">⚪ กำลังเช็ค...</span></td>
-            <td><a class="btn-monitor" href="${monitorUrl}" target="_blank">เปิด Monitor</a></td>
-            <td><button class="btn-danger" onclick="deletePark('${id}')">ลบ</button></td>
-          </tr>`;
+      sessionCode = code;
+      document.getElementById("error").textContent = "";
+      document.getElementById("startBtn").disabled = true;
+      document.getElementById("startBtn").textContent = "กำลังแชร์...";
+      document.getElementById("status").textContent = "⏳ กำลังขอ GPS...";
 
-        // เช็คจำนวนคนที่กำลังแชร์ตำแหน่งอยู่ตอนนี้ (ไม่หมดอายุ 24 ชม.) ของรหัสนี้
-        if (park.code) {
-          get(ref(db, "sessions/" + park.code)).then((sessSnap) => {
-            const sessions = sessSnap.val() || {};
-            const now = Date.now();
-            const activeCount = Object.values(sessions)
-              .filter(s => s && s.updatedAt && (now - s.updatedAt) <= EXPIRE_MS).length;
-            const el = document.getElementById(statusId);
-            if (!el) return;
-            el.innerHTML = activeCount > 0
-              ? `<span class="badge badge-active">🟢 ${activeCount} คน</span>`
-              : `<span class="badge badge-idle">⚪ ว่าง</span>`;
+      if (!navigator.geolocation) {
+        document.getElementById("error").textContent = "❌ เบราว์เซอร์นี้ไม่รองรับ GPS";
+        return;
+      }
+
+      sendLocation(); // ส่งทันทีครั้งแรก
+      intervalId = setInterval(sendLocation, 10 * 60 * 1000); // ทุก 10 นาที
+    };
+
+    function sendLocation() {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude, accuracy } = pos.coords;
+          const timestamp = Date.now();
+          set(ref(db, "sessions/" + sessionCode + "/" + deviceId), {
+            lat: latitude, lng: longitude,
+            accuracy: Math.round(accuracy),
+            updatedAt: timestamp
           });
-        } else {
-          const el = document.getElementById(statusId);
-          if (el) el.innerHTML = `<span class="badge badge-idle">⚪ ว่าง</span>`;
-        }
-      });
+          const time = new Date(timestamp).toLocaleTimeString("th-TH");
+          document.getElementById("status").textContent =
+            `✅ ส่งตำแหน่งแล้ว ${time}\n📡 ความแม่นยำ ±${Math.round(accuracy)}ม.`;
+        },
+        (err) => {
+          document.getElementById("error").textContent = "❌ ไม่สามารถอ่าน GPS: " + err.message;
+        },
+        { enableHighAccuracy: true, timeout: 15000 }
+      );
+    }
+
+    window.addEventListener("beforeunload", () => {
+      if (intervalId) clearInterval(intervalId);
     });
-  }
-
-  // เพิ่มอุทยาน — สร้างรหัส Session ตายตัวให้เลยตอนสร้าง
-  window.addPark = async () => {
-    const name   = document.getElementById("parkName").value.trim();
-    const region = document.getElementById("parkRegion").value.trim();
-    if (!name) { alert("กรุณากรอกชื่ออุทยาน"); return; }
-    const code = await generateUniqueCode();
-    await push(ref(db, "parks"), { name, region, code, createdAt: Date.now() });
-    document.getElementById("parkName").value = "";
-    document.getElementById("parkRegion").value = "";
-  };
-
-  // ลบอุทยาน (ลบข้อมูล session ของอุทยานนั้นทิ้งด้วย)
-  window.deletePark = async (id) => {
-    if (!confirm("ลบอุทยานนี้? ตำแหน่งทั้งหมดที่แชร์อยู่ภายใต้รหัสนี้จะถูกลบไปด้วย")) return;
-    const snap = await get(ref(db, "parks/" + id + "/code"));
-    const code = snap.val();
-    await remove(ref(db, "parks/" + id));
-    if (code) await remove(ref(db, "sessions/" + code));
-  };
-</script>
-
-</body>
-</html>
-  });
-
-  window.loginWithGoogle = async () => {
-    try { await signInWithPopup(auth, provider); }
-    catch(e) { document.getElementById("loginError").textContent = "❌ Login ไม่สำเร็จ"; }
-  };
-
-  window.logout = () => signOut(auth);
-
-  // โหลดรายการอุทยาน
-  function loadParks() {
-    onValue(ref(db, "parks"), (snapshot) => {
-      const tbody = document.getElementById("parkList");
-      const data = snapshot.val();
-      if (!data) {
-        tbody.innerHTML = '<tr><td colspan="5" id="emptyMsg" style="color:#64748b;text-align:center;padding:24px">ยังไม่มีอุทยาน</td></tr>';
-        return;
-      }
-      tbody.innerHTML = "";
-      Object.entries(data).forEach(([id, park]) => {
-        const monitorUrl = `https://zeroxar55.github.io/gps-tracker-FCA/monitor.html?park=${id}`;
-        const isActive = park.activeSession ? true : false;
-        tbody.innerHTML += `
-          <tr>
-            <td>${park.name}</td>
-            <td>${park.region || "—"}</td>
-            <td><span class="badge ${isActive ? 'badge-active' : 'badge-idle'}">${isActive ? '🟢 Active' : '⚪ ว่าง'}</span></td>
-            <td><a class="btn-monitor" href="${monitorUrl}" target="_blank">เปิด Monitor</a></td>
-            <td><button class="btn-danger" onclick="deletePark('${id}')">ลบ</button></td>
-          </tr>`;
-      });
-    });
-  }
-
-  // เพิ่มอุทยาน
-  window.addPark = async () => {
-    const name   = document.getElementById("parkName").value.trim();
-    const region = document.getElementById("parkRegion").value.trim();
-    if (!name) { alert("กรุณากรอกชื่ออุทยาน"); return; }
-    await push(ref(db, "parks"), { name, region, createdAt: Date.now() });
-    document.getElementById("parkName").value = "";
-    document.getElementById("parkRegion").value = "";
-  };
-
-  // ลบอุทยาน
-  window.deletePark = async (id) => {
-    if (!confirm("ลบอุทยานนี้?")) return;
-    await remove(ref(db, "parks/" + id));
-  };
-</script>
+  </script>
 
 </body>
 </html>
