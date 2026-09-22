@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPS Tracker — เริ่มแชร์ตำแหน่ง</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: sans-serif;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      min-height: 100vh;
+      background: #0f172a; color: #f1f5f9;
+      padding: 24px;
+    }
+    h1 { font-size: 1.4rem; margin-bottom: 8px; text-align: center; }
+    p  { font-size: 0.9rem; color: #94a3b8; margin-bottom: 24px; text-align: center; }
+    input {
+      width: 100%; max-width: 320px;
+      padding: 14px 16px; font-size: 1.5rem;
+      letter-spacing: 8px; text-align: center;
+      border: 2px solid #334155; border-radius: 12px;
+      background: #1e293b; color: #f1f5f9;
+      margin-bottom: 16px; outline: none;
+    }
+    input:focus { border-color: #38bdf8; }
+    button {
+      width: 100%; max-width: 320px;
+      padding: 14px; font-size: 1rem; font-weight: bold;
+      border: none; border-radius: 12px;
+      background: #0ea5e9; color: white; cursor: pointer;
+    }
+    button:disabled { background: #334155; cursor: not-allowed; }
+    #status {
+      margin-top: 20px; font-size: 0.85rem;
+      color: #38bdf8; text-align: center; min-height: 24px;
+    }
+    #error { color: #f87171; }
+  </style>
+</head>
+<body>
+
+  <h1>📍 แชร์ตำแหน่งของคุณ</h1>
+  <p>กรอกรหัส Session ที่ได้รับจากเจ้าหน้าที่<br>แล้วกดเริ่มแชร์ตำแหน่ง</p>
+
+  <input id="codeInput" type="text" maxlength="6"
+         placeholder="XXXXXX" oninput="this.value=this.value.toUpperCase()">
+  <button id="startBtn" onclick="startTracking()">เริ่มแชร์ตำแหน่ง</button>
+
+  <div id="status"></div>
+  <div id="error"></div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, set, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAb6EUMSsuaC9Ou1FrWfIgOiDY-_1fuEW4",
+      authDomain: "tracking-system-test-fca.firebaseapp.com",
+      databaseURL: "https://tracking-system-test-fca-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "tracking-system-test-fca",
+      storageBucket: "tracking-system-test-fca.firebasestorage.app",
+      messagingSenderId: "652915365750",
+      appId: "1:652915365750:web:c3f0610fc7f63dda630c57"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getDatabase(app);
+
+    let intervalId = null;
+    let sessionCode = null;
+
+    window.startTracking = function() {
+      const code = document.getElementById("codeInput").value.trim();
+      if (code.length < 4) {
+        document.getElementById("error").textContent = "⚠️ กรุณากรอกรหัสให้ครบ";
+        return;
+      }
+      sessionCode = code;
+      document.getElementById("error").textContent = "";
+      document.getElementById("startBtn").disabled = true;
+      document.getElementById("startBtn").textContent = "กำลังแชร์...";
+      document.getElementById("status").textContent = "⏳ กำลังขอ GPS...";
+
+      if (!navigator.geolocation) {
+        document.getElementById("error").textContent = "❌ เบราว์เซอร์นี้ไม่รองรับ GPS";
+        return;
+      }
+
+      sendLocation(); // ส่งทันทีครั้งแรก
+      intervalId = setInterval(sendLocation, 10 * 60 * 1000); // ทุก 10 นาที
+    };
+
+    function sendLocation() {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude, accuracy } = pos.coords;
+          const timestamp = Date.now();
+          set(ref(db, "sessions/" + sessionCode), {
+            lat: latitude, lng: longitude,
+            accuracy: Math.round(accuracy),
+            updatedAt: timestamp
+          });
+          const time = new Date(timestamp).toLocaleTimeString("th-TH");
+          document.getElementById("status").textContent =
+            `✅ ส่งตำแหน่งแล้ว ${time}\n📡 ความแม่นยำ ±${Math.round(accuracy)}ม.`;
+        },
+        (err) => {
+          document.getElementById("error").textContent = "❌ ไม่สามารถอ่าน GPS: " + err.message;
+        },
+        { enableHighAccuracy: true, timeout: 15000 }
+      );
+    }
+
+    window.addEventListener("beforeunload", () => {
+      if (intervalId) clearInterval(intervalId);
+    });
+  </script>
+
+</body>
+</html>

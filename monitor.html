@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPS Monitor — เจ้าหน้าที่</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #0f172a; color: #f1f5f9; height: 100vh; display: flex; flex-direction: column; }
+    #topbar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px; background: #1e293b;
+      border-bottom: 1px solid #334155; flex-wrap: wrap;
+    }
+    #topbar h1 { font-size: 1rem; white-space: nowrap; }
+    #sessionCode {
+      font-size: 2rem; font-weight: bold; letter-spacing: 8px;
+      color: #38bdf8; background: #0f172a;
+      border: 2px solid #38bdf8; border-radius: 8px;
+      padding: 4px 16px; min-width: 160px; text-align: center;
+    }
+    #status { font-size: 0.8rem; color: #94a3b8; flex: 1; }
+    #terminateBtn {
+      padding: 10px 20px; background: #ef4444; color: white;
+      border: none; border-radius: 8px; font-size: 0.9rem;
+      font-weight: bold; cursor: pointer; white-space: nowrap;
+    }
+    #terminateBtn:hover { background: #dc2626; }
+    #map { flex: 1; }
+    #infobar {
+      padding: 8px 16px; background: #1e293b;
+      border-top: 1px solid #334155;
+      font-size: 0.8rem; color: #94a3b8;
+      display: flex; gap: 24px;
+    }
+    .info-item span { color: #f1f5f9; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <div id="topbar">
+    <h1>📍 GPS Monitor</h1>
+    <div>
+      <div style="font-size:0.7rem;color:#64748b;margin-bottom:2px">SESSION CODE</div>
+      <div id="sessionCode">------</div>
+    </div>
+    <div id="status">⏳ รอการเชื่อมต่อ...</div>
+    <button id="terminateBtn" onclick="terminate()">⛔ Terminate</button>
+  </div>
+
+  <div id="map"></div>
+
+  <div id="infobar">
+    <div class="info-item">ละติจูด: <span id="infoLat">—</span></div>
+    <div class="info-item">ลองจิจูด: <span id="infoLng">—</span></div>
+    <div class="info-item">ความแม่นยำ: <span id="infoAcc">—</span></div>
+    <div class="info-item">อัปเดตล่าสุด: <span id="infoTime">—</span></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, onValue, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAb6EUMSsuaC9Ou1FrWfIgOiDY-_1fuEW4",
+      authDomain: "tracking-system-test-fca.firebaseapp.com",
+      databaseURL: "https://tracking-system-test-fca-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "tracking-system-test-fca",
+      storageBucket: "tracking-system-test-fca.firebasestorage.app",
+      messagingSenderId: "652915365750",
+      appId: "1:652915365750:web:c3f0610fc7f63dda630c57"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getDatabase(app);
+
+    // สร้าง session code 6 ตัว
+    const code = Math.random().toString(36).substring(2,8).toUpperCase();
+    document.getElementById("sessionCode").textContent = code;
+
+    // Init map — เริ่มที่เชียงใหม่
+    const map = L.map("map").setView([18.7883, 98.9853], 13);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap"
+    }).addTo(map);
+
+    let marker = null;
+    let circle = null;
+    let firstFix = true;
+
+    // ฟัง realtime จาก Firebase
+    const sessionRef = ref(db, "sessions/" + code);
+    onValue(sessionRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return;
+
+      const { lat, lng, accuracy, updatedAt } = data;
+
+      // วาง marker
+      if (!marker) {
+        marker = L.marker([lat, lng]).addTo(map).bindPopup("📍 ตำแหน่งปัจจุบัน").openPopup();
+        circle = L.circle([lat, lng], { radius: accuracy, color: "#38bdf8", fillOpacity: 0.1 }).addTo(map);
+      } else {
+        marker.setLatLng([lat, lng]);
+        circle.setLatLng([lat, lng]).setRadius(accuracy);
+      }
+
+      if (firstFix) { map.setView([lat, lng], 16); firstFix = false; }
+
+      // อัปเดต infobar
+      document.getElementById("infoLat").textContent  = lat.toFixed(6);
+      document.getElementById("infoLng").textContent  = lng.toFixed(6);
+      document.getElementById("infoAcc").textContent  = "±" + accuracy + "ม.";
+      document.getElementById("infoTime").textContent = new Date(updatedAt).toLocaleTimeString("th-TH");
+      document.getElementById("status").textContent   = "🟢 กำลัง Tracking — session: " + code;
+    });
+
+    // Terminate
+    window.terminate = async function() {
+      if (!confirm("ยืนยันหยุด Tracking และลบข้อมูล?")) return;
+      await remove(sessionRef);
+      document.getElementById("status").textContent = "🔴 Terminated — ลบข้อมูลแล้ว";
+      document.getElementById("terminateBtn").disabled = true;
+      if (marker) map.removeLayer(marker);
+      if (circle) map.removeLayer(circle);
+    };
+  </script>
+
+</body>
+</html>
