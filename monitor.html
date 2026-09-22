@@ -26,12 +26,6 @@
     #sessionBox .label { font-size: 0.65rem; color: #64748b; }
     #sessionCode { font-size: 1.6rem; font-weight: bold; letter-spacing: 6px; color: #38bdf8; }
     #status { font-size: 0.8rem; color: #94a3b8; flex: 1; }
-    #terminateBtn {
-      padding: 10px 20px; background: #ef4444; color: white;
-      border: none; border-radius: 8px; font-size: 0.9rem;
-      font-weight: bold; cursor: pointer; white-space: nowrap;
-    }
-    #terminateBtn:disabled { background: #334155; cursor: not-allowed; }
     #map { flex: 1; }
     #infobar {
       padding: 8px 16px; background: #1e293b;
@@ -45,13 +39,18 @@
       justify-content: center; flex: 1; gap: 16px;
     }
     #selectScreen h2 { color: #94a3b8; }
+    .popup-del-btn {
+      margin-top: 6px; padding: 6px 12px; background: #ef4444; color: white;
+      border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem; width: 100%;
+    }
+    .popup-time { font-size: 0.75rem; color: #64748b; margin-top: 4px; }
   </style>
 </head>
 <body>
 
 <div id="topbar">
   <h1>📍 GPS Monitor</h1>
-  <select id="parkSelect" onchange="selectPark()">
+  <select id="parkSelect" onchange="selectPark(this.value)">
     <option value="">— เลือกอุทยาน —</option>
   </select>
   <div id="sessionBox">
@@ -59,7 +58,6 @@
     <div id="sessionCode">------</div>
   </div>
   <div id="status">⏳ เลือกอุทยานก่อน</div>
-  <button id="terminateBtn" onclick="terminate()" disabled>⛔ Terminate</button>
 </div>
 
 <div id="selectScreen">
@@ -68,9 +66,7 @@
 <div id="map" style="display:none; flex:1;"></div>
 
 <div id="infobar">
-  <div>ละติจูด: <span id="infoLat">—</span></div>
-  <div>ลองจิจูด: <span id="infoLng">—</span></div>
-  <div>ความแม่นยำ: <span id="infoAcc">—</span></div>
+  <div>ผู้ใช้ที่กำลังแชร์: <span id="infoCount">0</span></div>
   <div>อัปเดตล่าสุด: <span id="infoTime">—</span></div>
 </div>
 
@@ -93,44 +89,45 @@
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
 
+  const EXPIRE_MS = 24 * 60 * 60 * 1000; // 24 ชม.
+
   let map = null;
-  let marker = null;
-  let circle = null;
-  let currentParkId = null;
   let sessionCode = null;
   let unsubscribe = null;
+  let markers = {}; // deviceId -> { marker, circle }
+  let parksById = {};
 
   // โหลดรายการอุทยาน
   onValue(ref(db, "parks"), (snapshot) => {
     const select = document.getElementById("parkSelect");
     const data = snapshot.val();
     select.innerHTML = '<option value="">— เลือกอุทยาน —</option>';
+    parksById = data || {};
     if (!data) return;
     Object.entries(data).forEach(([id, park]) => {
       select.innerHTML += `<option value="${id}">${park.name}${park.region ? ' ('+park.region+')' : ''}</option>`;
     });
+
+    // ถ้ามี ?park=ID ใน URL ให้เลือกอัตโนมัติ (มาจากลิงก์ Monitor ในหน้า Admin)
+    const urlParkId = new URLSearchParams(location.search).get("park");
+    if (urlParkId && parksById[urlParkId] && select.value !== urlParkId) {
+      select.value = urlParkId;
+      selectPark(urlParkId);
+    }
   });
 
   // เลือกอุทยาน
-  window.selectPark = async () => {
-    const select = document.getElementById("parkSelect");
-    const parkId = select.value;
+  window.selectPark = async (parkId) => {
     if (!parkId) return;
+    const park = parksById[parkId];
 
-    currentParkId = parkId;
-
-    // ดึง code จาก Firebase (ถ้าไม่มีให้สร้างใหม่)
-    const codeSnap = await get(ref(db, "parks/" + parkId + "/sessionCode"));
-    if (codeSnap.exists()) {
-      sessionCode = codeSnap.val();
-    } else {
-      sessionCode = Math.random().toString(36).substring(2,8).toUpperCase();
-      const { set } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js");
-      await set(ref(db, "parks/" + parkId + "/sessionCode"), sessionCode);
+    if (!park || !park.code) {
+      document.getElementById("status").textContent = "❌ อุทยานนี้ยังไม่มีรหัส Session (สร้างจากหน้า Admin)";
+      return;
     }
 
+    sessionCode = park.code;
     document.getElementById("sessionCode").textContent = sessionCode;
-    document.getElementById("terminateBtn").disabled = false;
 
     // เปิดแผนที่
     document.getElementById("selectScreen").style.display = "none";
@@ -144,51 +141,87 @@
     }
     setTimeout(() => map.invalidateSize(), 100);
 
-    // เคลียร์ listener เก่า
+    // เคลียร์ marker เก่าทั้งหมด
     if (unsubscribe) unsubscribe();
-    if (marker) { map.removeLayer(marker); marker = null; }
-    if (circle) { map.removeLayer(circle); circle = null; }
+    Object.values(markers).forEach(({ marker, circle }) => {
+      map.removeLayer(marker);
+      map.removeLayer(circle);
+    });
+    markers = {};
 
-    let firstFix = true;
     document.getElementById("status").textContent = "⏳ รอนักท่องเที่ยวแชร์ตำแหน่ง...";
 
-    // ฟัง GPS realtime
+    // ฟังตำแหน่งผู้ใช้ทุกคนภายใต้รหัสนี้ (หลายคนพร้อมกันได้)
     unsubscribe = onValue(ref(db, "sessions/" + sessionCode), (snap) => {
-      const data = snap.val();
-      if (!data) return;
-      const { lat, lng, accuracy, updatedAt } = data;
+      const data = snap.val() || {};
+      const now = Date.now();
+      let activeCount = 0;
+      let latestUpdate = 0;
+      const seenIds = new Set();
 
-      if (!marker) {
-        marker = L.marker([lat, lng]).addTo(map).bindPopup("📍 ตำแหน่งปัจจุบัน").openPopup();
-        circle = L.circle([lat, lng], { radius: accuracy, color: "#38bdf8", fillOpacity: 0.1 }).addTo(map);
-      } else {
-        marker.setLatLng([lat, lng]);
-        circle.setLatLng([lat, lng]).setRadius(accuracy);
+      Object.entries(data).forEach(([deviceId, loc]) => {
+        if (!loc || !loc.updatedAt) return;
+
+        // หมดอายุ 24 ชม. -> ลบทิ้งจาก Firebase และไม่แสดง
+        if (now - loc.updatedAt > EXPIRE_MS) {
+          remove(ref(db, "sessions/" + sessionCode + "/" + deviceId));
+          return;
+        }
+
+        seenIds.add(deviceId);
+        activeCount++;
+        if (loc.updatedAt > latestUpdate) latestUpdate = loc.updatedAt;
+
+        const timeStr = new Date(loc.updatedAt).toLocaleTimeString("th-TH");
+        const popupHtml = `
+          <div>
+            <b>📍 ผู้ใช้: ${deviceId}</b><br>
+            ความแม่นยำ: ±${loc.accuracy}ม.
+            <div class="popup-time">อัปเดตล่าสุด ${timeStr}</div>
+            <button class="popup-del-btn" onclick="window.removeUser('${deviceId}')">🗑️ ลบตำแหน่งนี้</button>
+          </div>`;
+
+        if (!markers[deviceId]) {
+          const marker = L.marker([loc.lat, loc.lng]).addTo(map).bindPopup(popupHtml);
+          const circle = L.circle([loc.lat, loc.lng], { radius: loc.accuracy, color: "#38bdf8", fillOpacity: 0.1 }).addTo(map);
+          markers[deviceId] = { marker, circle };
+        } else {
+          markers[deviceId].marker.setLatLng([loc.lat, loc.lng]).setPopupContent(popupHtml);
+          markers[deviceId].circle.setLatLng([loc.lat, loc.lng]).setRadius(loc.accuracy);
+        }
+      });
+
+      // เอา marker ของคนที่หายไป (ลบ/หมดอายุ) ออกจากแผนที่
+      Object.keys(markers).forEach((deviceId) => {
+        if (!seenIds.has(deviceId)) {
+          map.removeLayer(markers[deviceId].marker);
+          map.removeLayer(markers[deviceId].circle);
+          delete markers[deviceId];
+        }
+      });
+
+      // ปรับมุมมองแผนที่ให้เห็นทุกคนพอดี ตอนมีข้อมูลครั้งแรก
+      const activeMarkers = Object.values(markers).map(m => m.marker);
+      if (activeMarkers.length === 1) {
+        map.setView(activeMarkers[0].getLatLng(), 16);
+      } else if (activeMarkers.length > 1) {
+        const group = L.featureGroup(activeMarkers);
+        map.fitBounds(group.getBounds().pad(0.2));
       }
 
-      if (firstFix) { map.setView([lat, lng], 16); firstFix = false; }
-
-      document.getElementById("infoLat").textContent  = lat.toFixed(6);
-      document.getElementById("infoLng").textContent  = lng.toFixed(6);
-      document.getElementById("infoAcc").textContent  = "±" + accuracy + "ม.";
-      document.getElementById("infoTime").textContent = new Date(updatedAt).toLocaleTimeString("th-TH");
-      document.getElementById("status").textContent   = "🟢 กำลัง Tracking — " + sessionCode;
+      document.getElementById("infoCount").textContent = activeCount;
+      document.getElementById("infoTime").textContent = latestUpdate ? new Date(latestUpdate).toLocaleTimeString("th-TH") : "—";
+      document.getElementById("status").textContent = activeCount > 0
+        ? `🟢 กำลัง Tracking ${activeCount} คน — ${sessionCode}`
+        : `⏳ รอนักท่องเที่ยวแชร์ตำแหน่ง... — ${sessionCode}`;
     });
   };
 
-  // Terminate
-  window.terminate = async () => {
+  // ลบตำแหน่งของผู้ใช้คนเดียว (คลิกจาก popup บน Marker)
+  window.removeUser = async (deviceId) => {
     if (!sessionCode) return;
-    if (!confirm("ยืนยันหยุด Tracking และลบข้อมูล?")) return;
-    await remove(ref(db, "sessions/" + sessionCode));
-    document.getElementById("status").textContent = "🔴 Terminated";
-    document.getElementById("terminateBtn").disabled = true;
-    if (marker) { map.removeLayer(marker); marker = null; }
-    if (circle) { map.removeLayer(circle); circle = null; }
-    document.getElementById("infoLat").textContent = "—";
-    document.getElementById("infoLng").textContent = "—";
-    document.getElementById("infoAcc").textContent = "—";
-    document.getElementById("infoTime").textContent = "—";
+    if (!confirm("ลบตำแหน่งของผู้ใช้คนนี้?")) return;
+    await remove(ref(db, "sessions/" + sessionCode + "/" + deviceId));
   };
 </script>
 
